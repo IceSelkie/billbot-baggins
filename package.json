@@ -1,0 +1,14 @@
+{
+  "name": "billbot-baggins",
+  "version": "1.0.0",
+  "description": "A Hanabi bot written from scratch in TypeScript",
+  "main": "main.ts",
+  "scripts": {
+    "build": "tsc",
+    "start": "tsc --noEmit && ts-node src/index.ts"
+  },
+  "author": "",
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
