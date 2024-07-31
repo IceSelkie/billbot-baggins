@@ -9,6 +9,7 @@
   },
   "author": "",
   "dependencies": {
+    "@types/node": "^22.0.0",
     "ws": "^8.18.0"
   }
 }
