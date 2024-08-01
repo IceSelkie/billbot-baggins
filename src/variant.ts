@@ -1,10 +1,8 @@
 import * as fs from 'fs';
 // import { Card, Suit, Rank, CardMask } from './card';
-type Card = number;
-type CardMask = number;
-type Suit = number;
-type Rank = number;
-type Clue = number;
+type Card = { suit: number, rank: number }; // tuple of (suit,rank) each of type byte
+type CardMask = number; // 16-30 bit number to mask card possibilities
+type Clue = { type: number, value: number }; // tuple to point to clue or rank, and which one
 type Hand = Card[];
 
 export class Variant {
@@ -14,11 +12,12 @@ export class Variant {
 
   variant: VariantData | undefined;
   deck: Card[];       // len: total cards  eg:[0x1,0x1,0x1, 0x2,0x2, ... 1<<23,1<<23, 1<<24] len50
-  cardStrs: string[]; // len: num unique cards  eg:[R1 R2 ... P4 P5] len25
+  // cardStrs: string[]; // len: num unique cards  eg:[R1 R2 ... P4 P5] len25
 
   suitMasks: CardMask[];
   rankMasks: CardMask[];
 
+  clues: Clue[];
   cardTouches: Map<Card, Clue[]>;
   clueTouches: Map<Clue, Card[]>;
 
@@ -61,9 +60,15 @@ export class Variant {
       defaultRankComposition = [...'111223345'].map(c => Number(c) - 1);
 
     this.deck = [];
-    this.cardStrs = [];
-    let i: number = -1;
-    for (let suit of this.variant.suits) {
+    this.clues = [
+      ...this.variant.clueRanks.map(rank => new Clue(RANK, rank + "")),
+      ...this.variant.clueColors.map(color => new Clue(COLOR, color.abbreviation))
+    ];
+    this.clueTouches = new Map(this.clues.map(clue => [clue, []]));
+    // this.cardStrs = [];
+    // let i: number = -1;
+    for (let suitIndex = 0; suitIndex < this.variant.suits.length; suitIndex++) {
+      let suit: SuitDefinition = this.variant.suits[suitIndex];
       let suitComposition: number[] = defaultRankComposition;
       if (suit.oneOfEach) // black-ish
         suitComposition = [...'12345'].map(c => Number(c) - 1);
@@ -71,9 +76,17 @@ export class Variant {
         suitComposition = [...'1223344555'].map(c => Number(c) - 1);
 
       for (let rank of this.variant.ranks) {
-        let cardStr: string = suit.abbreviation + rank;
-        if (this.cardStrs[i] !== cardStr)
-          this.cardStrs[++i] = cardStr;
+        let card: Card = { suit: suitIndex, rank };
+        this.deck.push(card);
+        // let cardStr: string = suit.abbreviation + rank;
+        // if (this.cardStrs[i] !== cardStr)
+        //   this.cardStrs[++i] = cardStr;
+
+        // Rank Clues
+        // allClueRanks, noClueRanks, default
+
+        // Color Clues
+        // allClueColors, noClueColors, prism, clueColors
       }
     }
   }
