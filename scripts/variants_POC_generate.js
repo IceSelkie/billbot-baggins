@@ -1,13 +1,25 @@
+fs=require("fs"); os=require("os"); path=require("path"); home=os.homedir();
+
+// Executes: subcall_variants_transformer.js
+// Reads: "wshistory/db_example_games_by_variant_id.json"
+//        variants_combined.json
+//        derived_empirical_decks.json
+// Writes: derived_touches.json
+//         derived_transformed.json
+
+
+
+
 // variant objects
 variants = data = Object.values(JSON.parse(fs.readFileSync("variants_combined.json"))) ; data.length;
 variantsById = new Map(data.map(v=>[v.id,v]))
 // varid -> dbgameid
 db = JSON.parse(fs.readFileSync("wshistory/db_example_games_by_variant_id.json")) ; db.length;
 
-// ["No Variant", "01,01,01,02,...,44,44,45"]
-nametocard_emp = JSON.parse(fs.readFileSync("derived_empirical_decks.json")) ; null
-// [0, "R1,R1,R1,R2,...,P4,P4,P5"]
-idtocards_emp = nametocard_emp.map(([vname,str])=>[variants.find(v=>v.name==vname),str]).map(([v,str])=>[v.id,str.split(",").map(([suit,rank])=>v.suits[suit].abbreviation+rank).join()]) ; null
+// // ["No Variant", "01,01,01,02,...,44,44,45"]
+// nametocard_emp = JSON.parse(fs.readFileSync("derived_empirical_decks.json")) ; null
+// // [0, "R1,R1,R1,R2,...,P4,P4,P5"]
+// idtocards_emp = nametocard_emp.map(([vname,str])=>[variants.find(v=>v.name==vname),str]).map(([v,str])=>[v.id,str.split(",").map(([suit,rank])=>v.suits[suit].abbreviation+rank).join()]) ; null
 
 
 // This exists in variants_transformer now
@@ -32,9 +44,11 @@ idtocards_emp = nametocard_emp.map(([vname,str])=>[variants.find(v=>v.name==vnam
 
 
 // Run the variants transformer
-v = eval(""+fs.readFileSync("variants_transformer.js"));
+v = eval(""+fs.readFileSync("subcall_variants_transformer.js"));
 // Save hint touches to file.
 fs.writeFileSync("derived_touches.json",`[\n  ${v.map(a=>`[${a.id}, ${JSON.stringify(a.touches)}]`).join(",\n  ")}\n]\n`);
+// Save the whole object(s):
+fs.writeFileSync("derived_transformed.json",`[\n  ${v.map(a=>`[${a.id}, ${JSON.stringify(a)}]`).join(",\n  ")}\n]\n`);
 
-// v = eval(""+fs.readFileSync("variants_transformer.js"));fs.writeFileSync("derived_touches.json",`[\n  ${v.map(a=>`[${a.id}, ${JSON.stringify(a.touches)}]`).join(",\n  ")}\n]\n`);
+// v = eval(""+fs.readFileSync("subcall_variants_transformer.js"));fs.writeFileSync("derived_touches.json",`[\n  ${v.map(a=>`[${a.id}, ${JSON.stringify(a.touches)}]`).join(",\n  ")}\n]\n`);
 

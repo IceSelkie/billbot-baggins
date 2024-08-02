@@ -1,6 +1,6 @@
 fs=require("fs"); os=require("os"); path=require("path"); home=os.homedir();
 
-// Executes: verifyGame.js
+// Executes: subcall_verify_game.js
 // Reads: "wshistory/c*.json"
 //        variants_combined.json
 //        derived_touches.json
@@ -47,7 +47,7 @@ varbyname = new Map(Object.values(JSON.parse(fs.readFileSync("variants_combined.
 // VERIFY DATA
 
 // Load the games and verify things are as expected
-eval(fs.readFileSync("verifyGame.js")+"");
+eval(fs.readFileSync("subcall_verify_game.js")+"");
 verifyAll = gamesbyname.map(a=>verifyGame(a)) ; null;
 
 // Compile all clues made
