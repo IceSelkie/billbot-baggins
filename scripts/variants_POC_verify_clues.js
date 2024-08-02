@@ -3,7 +3,7 @@ fs=require("fs"); os=require("os"); path=require("path"); home=os.homedir();
 // Executes: verifyGame.js
 // Reads: "wshistory/c*.json"
 //        variants_combined.json
-//        variants_touches.json
+//        derived_touches.json
 // Writes: derived_example_games.json
 //         derived_empirical_decks.json
 //         derived_empirical_clues.json
@@ -56,7 +56,7 @@ fs.writeFileSync("derived_empirical_clues.json",`[\n  ${cluesToTest.map(a=>JSON.
 
 // Determine what cards are touched by what clues
 // Check against the empirical facts from past games to ensure we understand what clues touch what cards
-v_touches = new Map(JSON.parse(fs.readFileSync("variants_touches.json"))); v_touches.size;
+v_touches = new Map(JSON.parse(fs.readFileSync("derived_touches.json"))); v_touches.size;
 
 // Test each clue case to determine if they pass or not
 failed = cluesToTest.map(clueExample=>{

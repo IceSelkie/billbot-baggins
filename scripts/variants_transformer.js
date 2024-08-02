@@ -98,6 +98,7 @@ data.map(v => {
   }));
 
   let cardMasks = new Map(touches.map((a,i)=>[a[0],(1n<<BigInt(i))]));
+  let cardMaskUnknown = [...cardMasks.values()].reduce((c,n)=>c|n)+"";
   let touchesInv = [...clueColors+clueRanks].map(c=>[c,touches.filter(t=>t[1].includes(c)).map(t=>t[0])]);
   let clueMasks = touchesInv.map(([clue,cards])=>[clue,cards.map(c=>cardMasks.get(c)).reduce((c,n)=>c|n,0n)]);
 
@@ -113,6 +114,7 @@ data.map(v => {
     touches: touches.map(([card, clues]) => card + ":" + clues).join(),
     touchesInv: touchesInv.map(([clue, cards]) => clue + ":" + cards.join(" ")).join(),
     cardMasks: [...cardMasks.entries()].map(a=>a.join(":")).join(),
+    cardMaskUnknown,
     clueMasks: clueMasks.map(a=>a.join(":")).join()
   };
 });
