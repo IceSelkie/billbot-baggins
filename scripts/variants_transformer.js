@@ -8,8 +8,8 @@ data.map(v => {
   let { id, name } = v;
   let ranks = v.ranks.join("");
   let suits = v.suitAbbreviations.join("");
-  let clueableRanks = v.clueRanks.join("");
-  let colors = v.clueColors.map(a => a.abbreviation).join("");
+  let clueRanks = v.clueRanks.join("");
+  let clueColors = v.clueColors.map(a => a.abbreviation).join("");
   let cards = v.suits.map((s, suitIndex) => {
     let comp2 = (s.oneOfEach ? (v.upOrDown ? '123457' : '12345') :
       s.reversed ? '1223344555' : comp);
@@ -96,12 +96,23 @@ data.map(v => {
       touchedString = v.clueColors.map(a => a.abbreviation).filter(c => touchedString.includes(c)).join("");
     return [v.suitAbbreviations[suitIndex] + r, touchedString];
   }));
+
+  let cardMasks = new Map(touches.map((a,i)=>[a[0],(1n<<BigInt(i))]));
+  let touchesInv = [...clueColors+clueRanks].map(c=>[c,touches.filter(t=>t[1].includes(c)).map(t=>t[0])]);
+  let clueMasks = touchesInv.map(([clue,cards])=>[clue,cards.map(c=>cardMasks.get(c)).reduce((c,n)=>c|n,0n)]);
+
+  // let clarifyClue=({type,value})=>(type==0?v.clueColors.map(a=>a.abbreviation)[value]:value+"");
+
   return {
     id, name,
-    suits, ranks, colors,
+    suits, ranks,
+    clueColors, clueRanks,
     // "R1,R1,R1,R2,...,P4,P5"
     cards: cards.join(),
     // "R1:R1,R2:R2,...,M4:RYGB4,M5:RYGB5"
-    touches: touches.map(([card, clues]) => card + ":" + clues).join()
+    touches: touches.map(([card, clues]) => card + ":" + clues).join(),
+    touchesInv: touchesInv.map(([clue, cards]) => clue + ":" + cards.join(" ")).join(),
+    cardMasks: [...cardMasks.entries()].map(a=>a.join(":")).join(),
+    clueMasks: clueMasks.map(a=>a.join(":")).join()
   };
 });
