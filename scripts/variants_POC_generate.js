@@ -3,7 +3,7 @@ fs=require("fs"); os=require("os"); path=require("path"); home=os.homedir();
 // Executes: subcall_variants_transformer.js
 // Reads: "wshistory/db_example_games_by_variant_id.json"
 //        variants_combined.json
-//        derived_empirical_decks.json
+//        derived_empirical_decks.json (depends on "verify_clues")
 // Writes: derived_touches.json
 //         derived_transformed.json
 
@@ -11,10 +11,10 @@ fs=require("fs"); os=require("os"); path=require("path"); home=os.homedir();
 
 
 // variant objects
-variants = data = Object.values(JSON.parse(fs.readFileSync("variants_combined.json"))) ; data.length;
+variants = data = Object.values(JSON.parse(fs.readFileSync("variants_combined.json"))) ; variants.length;
 variantsById = new Map(data.map(v=>[v.id,v]))
 // varid -> dbgameid
-db = JSON.parse(fs.readFileSync("wshistory/db_example_games_by_variant_id.json")) ; db.length;
+db = JSON.parse(fs.readFileSync("wshistory/db_example_games_by_variant_id.json")) ; Object.keys(db).length;
 
 // // ["No Variant", "01,01,01,02,...,44,44,45"]
 // nametocard_emp = JSON.parse(fs.readFileSync("derived_empirical_decks.json")) ; null
