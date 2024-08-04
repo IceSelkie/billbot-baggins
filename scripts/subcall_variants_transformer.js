@@ -97,7 +97,8 @@ data.map(v => {
     return [v.suitAbbreviations[suitIndex] + r, touchedString];
   }));
 
-  let cardMasks = new Map(touches.map((a,i)=>[a[0],(1n<<BigInt(i))]));
+  // let cardMasks = new Map(touches.map((a,i)=>[a[0],(1n<<BigInt(i))]));
+  let cardMasks = new Map(v.ranks.flatMap(r=>v.suitAbbreviations.map(s=>s+r)).map((key,i)=>[key,1n<<BigInt(i)]));
   let cardMaskUnknown = [...cardMasks.values()].reduce((c,n)=>c|n)+"";
   let touchesInv = [...clueColors+clueRanks].map(c=>[c,touches.filter(t=>t[1].includes(c)).map(t=>t[0])]);
   let clueMasks = touchesInv.map(([clue,cards])=>[clue,cards.map(c=>cardMasks.get(c)).reduce((c,n)=>c|n,0n)]);

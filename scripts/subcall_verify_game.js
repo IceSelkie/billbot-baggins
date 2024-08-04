@@ -93,7 +93,7 @@ function verifyGame([vname,g],shouldClarify=true,vari,dvari){
   if (shouldClarify) {
     ret.hands = ret.hands.map(h=>h.map(clarify));
     ret.discardPile = ret.discardPile.map(clarify);
-    ret.playPile = ret.playPile.map(([order,suitIndex,rank])=>clarify(order));
+    ret.playPile = ret.playPile.map(({order,suitIndex,rank})=>clarify(order));
     // ret.playPile = ret.playPile.map(a=>a.map(clarify));
     ret.clues = ret.clues.map(({clueTarget,touched,untouched})=>{return{clueTarget:clarifyClue(clueTarget),touched:touched.map(clarify).join(),untouched:untouched.map(clarify).join()}});
   } else {

@@ -19,4 +19,8 @@ tuples = Object.entries(games).map(([name,game])=>{let vari = variants.find(v=>v
 verifyGame=([vname,g],maxTurns=-1,shouldClarify=true)=>{throw new Error('Load definition from "subcall_verify_game.js".')};
 eval(fs.readFileSync("subcall_verify_game.js")+"");
 
-(vid=>{let t=tuples.find(a=>a[0].id==vid);let ret=verifyGame([t[0].name,t[2]],false,t[0],t[1]);ret.playPile.forEach(c=>console.log(disp(t[0].suitAbbreviations,t[0].ranks,c.playable)));return ret;})(2074).playPile;
+verifyPlayable=(vid,show=false)=>{let t=tuples.find(a=>a[0].id==vid);let ret=verifyGame([t[0].name,t[2]],false,t[0],t[1]);ret.playPile.forEach(c=>{if(show)console.log(/*disp(t[0].suitAbbreviations,t[0].ranks,c.playable)*/display(c.playable))});return ret;};
+verifyPlayable(2074).playPile;
+
+// Currently doesnt spit out error message(s)
+tuples.map(a=>verifyPlayable(a[0].id).playPile);

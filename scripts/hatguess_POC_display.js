@@ -1,3 +1,8 @@
+fs=require("fs");
+
+// Executes: subcall_hatguess_cox.js
+// Reads: N/A
+// Writes: N/A
 
 transposeStringArray=(arr)=>[...arr[0]].map((_,i)=>arr.map(a=>a[i]));
 display=(vals,r=5,c=5)=>{
@@ -24,7 +29,7 @@ display=(vals,r=5,c=5)=>{
 
 
 
-eval(fs.readFileSync("subcall_focus.js")+"");
+eval(fs.readFileSync("subcall_hatguess_cox.js")+"");
 
 function coxExample() {
   parseGrid=(s)=>BigInt(`0b${s.split(" ").map((a,i,arr)=>[...a].map((_,j)=>arr[j][i]).join("")).join("")}`);
