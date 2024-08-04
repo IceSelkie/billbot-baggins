@@ -19,6 +19,7 @@ function verifyGame([vname,g],shouldClarify=true,vari,dvari){
     maskMap[suitIndex][Number(r)] = BigInt(v);
   });
 
+  // Determine the set of cards that can be played without causing a strike
   let playable=()=>{
     let ret = null;
     if (vari.throwItInAHole) {
@@ -54,6 +55,12 @@ function verifyGame([vname,g],shouldClarify=true,vari,dvari){
     }
     return ret.flatMap((ranks,suitIndex)=>ranks.map(rank=>maskMap[suitIndex]?.[rank])).filter(a=>a).reduce((c,n)=>c|n,0n);
   };
+
+  // Determine the cards that will never be played
+  // TODO
+  let trash=()=>{
+    return 0n;
+  }
 
   g.actions.forEach(a=>{
     if (a.type == "draw") {
