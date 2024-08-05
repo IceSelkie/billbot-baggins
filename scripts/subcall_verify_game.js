@@ -4,23 +4,31 @@ function verifyGame([vname,g],shouldClarify=true,vari,dvari){
   if (!vari) vari = varbyname.get(vname);
   let clarify=(order)=>{let c=g.cards[order]; return vari.suitAbbreviations[c.suitIndex]+c.rank;};
   let clarifyClue=({type,value})=>(type==0?vari.clueColors.map(a=>a.abbreviation)[value]:value+"");
-  let info = {variant:vari.name,v:vari.id,numPlayers:g.actions.map(a=>a.playerIndex).reduce((c,n)=>n>c?n:c,0)+1,strikes:0};
+  let info = {variant:vari.name,v:vari.id,numPlayers:g.actions.map(a=>a.playerIndex).reduce((c,n)=>n>c?n:c,0)+1,strikes:0,tokens:8};
   let hands=new Array(info.numPlayers).fill(null).map(a=>[]);
+  let public = {hands:new Array(info.numPlayers).fill(null).map(a=>[])};
   let discardPile = [];
   let playPile = [];
   // let playPile = vari.suits.map(_=>[]);
   let clues = [];
-  let ret={info,hands,discardPile,playPile,clues};
+  let ret={info,hands,discardPile,playPile,clues,public};
   let startCycle = true;
   let maskMap = [];
+  let clueMasks = [[],[]];
   dvari?.cardMasks.split(",").map(t=>t.split(":")).map(([[s,r],v])=>{
     let suitIndex = vari.suitAbbreviations.indexOf(s);
     if (!maskMap[suitIndex]) maskMap[suitIndex] = [];
     maskMap[suitIndex][Number(r)] = BigInt(v);
   });
+  dvari?.clueMasks.split(",").map(t=>t.split(":")).map(([c,v])=>{
+    if (vari.suitAbbreviations.includes(c))
+      clueMasks[0][vari.suitAbbreviations.indexOf(c)] = BigInt(v);
+    else
+      clueMasks[1][c] = BigInt(v);
+  })
 
   // Determine the set of cards that can be played without causing a strike
-  let playable=()=>{
+  let directPlayable=()=>{
     let ret = null;
     if (vari.throwItInAHole) {
       // tiiah // requires addl knowledge
@@ -38,6 +46,7 @@ function verifyGame([vname,g],shouldClarify=true,vari,dvari){
 
         // up or down -> S
         if (vari.upOrDown) {
+          // 12345 72345 54321 74321
           if (played.length == 0) return [1,5,7];
           if (played.length == 1 && played[0].rank == 7) return [2,4];
           if (played.length == 1) return (played[0].rank == 1)?[2]:[4];
@@ -58,35 +67,66 @@ function verifyGame([vname,g],shouldClarify=true,vari,dvari){
 
   // Determine the cards that will never be played
   // TODO
-  let trash=()=>{
-    return 0n;
+  let directTrash=()=>{
+    // played
+    let played = playPile.map(a=>maskMap[a.suitIndex]?.[a.rank]).filter(a=>a).reduce((c,n)=>c|n,0n);
+    // Never playable
+    let beyond = 0n;
+    return played | beyond;
   }
 
   g.actions.forEach(a=>{
     if (a.type == "draw") {
       //console.log(a.playerIndex,hands[a.playerIndex])
       hands[a.playerIndex].push(a.order);
+      public.hands[a.playerIndex].push(BigInt(dvari?.cardMaskUnknown ?? 0));
     } else if (startCycle) {
       startCycle = false;
       info.handSize = hands.map(a=>a.length);
     }
     if (a.type == "discard") {
       discardPile.push(a.order);
+      public.hands[a.playerIndex].splice(hands[a.playerIndex].indexOf(a.order),1);
       hands[a.playerIndex] = hands[a.playerIndex].filter(c=>c!==a.order);
+      info.tokens++;
+      ret.trash = directTrash();
     }
     if (a.type == "play") {
       // playPile.push(a.order);
       // playPile[a.suitIndex].push(a.order);
       playPile.push({order:a.order,suitIndex:a.suitIndex,rank:a.rank});
-      playPile[playPile.length-1].playable = playable();
+      ret.public.playable = directPlayable();
+      playPile[playPile.length-1].playable = ret.public.playable;
+      public.hands[a.playerIndex].splice(hands[a.playerIndex].indexOf(a.order),1);
       hands[a.playerIndex] = hands[a.playerIndex].filter(c=>c!==a.order);
+      ret.trash = directTrash();
     }
     if (a.type == "clue") {
-      clues.push({clueTarget:a.clue, touched:a.list, untouched:hands[a.target].filter(b=>!a.list.includes(b))});
-      hands[a.target]
+      let hand = hands[a.target];
+      let phand = public.hands[a.target];
+      clues.push({clueTarget:a.clue, touched:a.list, untouched:hand.filter(b=>!a.list.includes(b))});
+
+      let hintMask = clueMasks[a.clue.type][a.clue.value];
+      if (hintMask!==undefined) {
+        public.hands[a.target] = phand.map((cardMask,index)=>{
+          // console.log({index,cardMask,hintMask});
+          if (a.list.includes(hand[index]))
+            return cardMask&hintMask;
+          else
+            return cardMask-(cardMask&hintMask);
+        });
+        // console.log(`Hint-${clarifyClue(a.clue)} to player ${a.target}:`);
+        // let humanReadable = phand.map(a=>display(a).split("\n"));
+        // humanReadable[0].forEach((_,i)=>console.log(humanReadable.map(a=>a[i]).join("  |  ")));
+        // console.log('Becomes:');
+        // humanReadable = public.hands[a.target].map(a=>display(a).split("\n"));
+        // humanReadable[0].forEach((_,i)=>console.log(humanReadable.map(a=>a[i]).join("  |  ")));
+        // console.log();
+      }
     }
     if (a.type == "strike") {
       info.strikes++;
+      info.tokens--; // A bombed card also calls discard which increments tokens.
       if (info.strikes!==a.num) throw new Error(`Strikes mismatch. action says ${a.num}, but after incrementing we have ${info.strikes}!`);
     }
   })
