@@ -1,15 +1,33 @@
 
 emptyArrays=(n)=>new Array(n).fill(null).map(_=>[]);
 
+// Currently works with:
+//  - WS Games as history
+// Currently does NOT work with:
+//  - TIIAH
+//  - Database JSONgame-s (adapter needed)
+// Other known issues:
+//  - Sudoku playable cards don't get updated correctly
+//  - Discarding a critcal doesnt correctly update trash or playable
+//  - Token count is not properly tracked
 class GameState {
   constructor(vari, dvari, playerNames, ourPlayerIndex=-1) {
+    if (vari instanceof String || typeof vari === 'string') {
+      console.log('input',{playerNames,ourPlayerIndex});
+      ourPlayerIndex = playerNames??-1; playerNames = dvari;
+      dvari =       v.find(a=>a.name===vari || a.id==vari);
+      vari = variants.find(a=>a.name===vari || a.id==vari);
+      console.log('saved',{playerNames,ourPlayerIndex});
+    }
+    this.ai = null;
     this.variant = vari; // has flags and card information
     this.dvari = dvari; // has general mask info
     this.numPlayers = playerNames.length;
     this.playerNames = playerNames;
 
-    this.currentPlayerIndex = 0;
+    this.currentPlayerIndex = -1; // start at -1 so first turn increments to 0
     this.ourPlayerIndex = ourPlayerIndex;
+    this.shouldPlay = ourPlayerIndex!==-1;
 
     this.suits = [...dvari.suits];
     this.ranks = [...dvari.ranks];
@@ -67,11 +85,15 @@ class GameState {
 
     this.turn++;
     this.currentPlayerIndex = (this.currentPlayerIndex+1)%this.numPlayers;
-    console.log("Turn increments to",this.turn,`which is now ${this.playerNames[this.currentPlayerIndex]}'s turn.`);
+    console.log("Turn increments to turn",this.turn,'which is now player',this.currentPlayerIndex, `(${this.playerNames[this.currentPlayerIndex]})'s turn.`);
     if (this.currentPlayerIndex == this.ourPlayerIndex) {
-      console.log(`It is now our player (${this.ourPlayerIndex})'s turn.`);
-      console.log("Skipping, since this isnt implemented yet.");
-      // getPlayerMove();
+      console.log('It is now our turn...');
+      if (!this.shouldPlay)
+        console.log("Skipping, since we are in replay/history.");
+      else if (!this.ai)
+        console.log("I'm missing my brain... I don't know how to play...");
+      else
+        this.ai.playerTurn();
     }
   }
   updatePlayable(card){
@@ -163,7 +185,11 @@ class GameState {
   serverClue({clue, target, list}) {
     if (this.gameOver) throw new Error(`Game already ended. Cannot further update game!`);
 
+    this.tokens--;
+
     // Do Hatguessing Logic Here
+    if (this.ai)
+      this.ai.playerInterpretClue({clue,target,list});
 
     // update card (cant update anything else)
     let hand = this.hands[target];
@@ -193,14 +219,46 @@ class GameState {
     this.strikes++;
     if (this.strikes!==num)
       throw new Error(`Local strike count ${this.strikes} and server strike count (${num}) do not match!`);
+    
+    // The associated discard isn't real
+    this.tokens -= this.tokensPerDiscard;
   }
 
   // ensure turn counter, strikes, clues, timing, etc. are still up to date
-  serverOther(action){}
+  serverAction(action){
+    console.log("Passed action with",action.type);
+    if (action.type==="draw")
+      this.serverDraw(action);
+    if (action.type==="play")
+      this.serverPlay(action);
+    if (action.type==="clue")
+      this.serverClue(action);
+    if (action.type==="discard")
+      this.serverDiscard(action);
+    if (action.type==="strike")
+      this.serverStrike(action);
 
-  clientPlay({order}){}
-  clientDiscard({order}){}
-  clientClue({target, clue}){}
+    if (action.type==="status")
+    //   this.serverStatus(action);
+      console.log(`Current state:`,JSON.stringify({turn:this.turn, tokens:this.tokens, strikes:this.strikes, playable:bits(this.playable), trash:bits(this.trash), playPile:this.playPile.map(a=>a?.length), discardPile:this.discardPile.length,hands:this.hands.map(hand=>hand.map(c=>bits(c.public)))}));
+    if (action.type==="gameOver")
+      this.serverGameOver(action);
+    if (action.type==="turn")
+      this.serverTurn(action);
+  }
+  serverActionList(actionList) {
+    const shouldPlay = this.shouldPlay;
+    this.shouldPlay = false;
+    actionList.forEach((action,i)=>{
+      // reenable actions on last action
+      if (i == actionList.length-1) this.shouldPlay = shouldPlay;
+      this.serverAction(action);
+    });
+  }
+
+  clientPlay({order}){throw new Error('Method "clientPlay" not implemented');}
+  clientDiscard({order}){throw new Error('Method "clientDiscard" not implemented');}
+  clientClue({target, clue}){throw new Error('Method "clientClue" not implemented');}
 }
 
 
@@ -220,53 +278,53 @@ bits=(int)=>{
   return Number(ret);
 }
 
-fs=require("fs");
-eval(""+fs.readFileSync("variants_POC_generate.js"));
-let game = Object.fromEntries(JSON.parse(fs.readFileSync("wshistory/"+fs.readdirSync("wshistory").filter(a=>a.startsWith("c")&&a.endsWith("_11.json"))[0])).filter(a=>"init gameActionList cardIdentities noteList".split(" ").find(b=>a.startsWith(b))).map(a=>{let ind=a.indexOf(" ");return [a.slice(0,ind),JSON.parse(a.slice(ind))]}));
+// fs=require("fs");
+// eval(""+fs.readFileSync("variants_POC_generate.js"));
+// let game = Object.fromEntries(JSON.parse(fs.readFileSync("wshistory/"+fs.readdirSync("wshistory").filter(a=>a.startsWith("c")&&a.endsWith("_11.json"))[0])).filter(a=>"init gameActionList cardIdentities noteList".split(" ").find(b=>a.startsWith(b))).map(a=>{let ind=a.indexOf(" ");return [a.slice(0,ind),JSON.parse(a.slice(ind))]}));
 
-// game.init.options.variantName;
-// game.init.playerNames;
-// game.gameActionList.list;
-// game.cardIdentities.cardIdentities;
+// // game.init.options.variantName;
+// // game.init.playerNames;
+// // game.gameActionList.list;
+// // game.cardIdentities.cardIdentities;
 
-let gs = new GameState(
-  variants.find(a=>a.name===game.init.options.variantName),
-  v.find(a=>a.name===game.init.options.variantName),
-  game.init.playerNames
-);
-
-
-for (let i=0; i<game.gameActionList.list.length; i++) {
-  let action = game.gameActionList.list[i];
-
-  let {turn, tokens, strikes, playable, trash, playPile, discardPile, hands} = gs;
-
-  // turn tokens strikes bits(playable), bits(trash), playpile length, discardPile.length;
-
-  console.log(`Sending ${action.type}...`);
-
-  if (action.type==="draw")
-    gs.serverDraw(action);
-  if (action.type==="play")
-    gs.serverPlay(action);
-  if (action.type==="clue")
-    gs.serverClue(action);
-  if (action.type==="discard")
-    gs.serverDiscard(action);
-  if (action.type==="strike")
-    gs.serverStrike(action);
-
-  if (action.type==="status")
-  //   gs.serverStatus(action);
-    console.log(`Current state:`,JSON.stringify({turn, tokens, strikes, playable:bits(playable), trash:bits(playable), playPile:playPile.map(a=>a?.length), discardPile:discardPile.length,hands:hands.map(hand=>hand.map(c=>bits(c.public)))}));
-  if (action.type==="gameOver")
-    gs.serverGameOver(action);
-  if (action.type==="turn")
-    gs.serverTurn(action);
-}
+// let gs = new GameState(
+//   variants.find(a=>a.name===game.init.options.variantName),
+//   v.find(a=>a.name===game.init.options.variantName),
+//   game.init.playerNames
+// );
 
 
+// for (let i=0; i<game.gameActionList.list.length; i++) {
+//   let action = game.gameActionList.list[i];
 
+//   let {turn, tokens, strikes, playable, trash, playPile, discardPile, hands} = gs;
+
+//   // turn tokens strikes bits(playable), bits(trash), playpile length, discardPile.length;
+
+//   console.log(`Sending ${action.type}...`, JSON.stringify(action));
+
+//   if (action.type==="draw")
+//     gs.serverDraw(action);
+//   if (action.type==="play")
+//     gs.serverPlay(action);
+//   if (action.type==="clue")
+//     gs.serverClue(action);
+//   if (action.type==="discard")
+//     gs.serverDiscard(action);
+//   if (action.type==="strike")
+//     gs.serverStrike(action);
+
+//   if (action.type==="status")
+//   //   gs.serverStatus(action);
+//     console.log(`Current state:`,JSON.stringify({turn, tokens, strikes, playable:bits(playable), trash:bits(playable), playPile:playPile.map(a=>a?.length), discardPile:discardPile.length,hands:hands.map(hand=>hand.map(c=>bits(c.public)))}));
+//   if (action.type==="gameOver")
+//     gs.serverGameOver(action);
+//   if (action.type==="turn")
+//     gs.serverTurn(action);
+// }
+
+
+GameState;
 
 
 
