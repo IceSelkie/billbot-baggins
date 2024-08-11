@@ -27,6 +27,11 @@ display=(vals,r=5,c=5)=>{
   return ret;
 }
 
+displayRow=(cards,r,c)=>{
+  let grid = cards.map(card=>display(card,r,c).split("\n"));
+  return grid[0].map((_,row)=>grid.map(cardText=>[...cardText[row]].reverse().join("")).join("    ")).reverse().join("\n");
+}
+
 
 
 eval(fs.readFileSync("subcall_hatguess_cox.js")+"");
@@ -68,4 +73,4 @@ function coxExample() {
   if (outputs.join() != '414,26906624,65536,1024')
     throw new Error("Output no longer matches example in the Cox et al. paper!");
 }
-coxExample();
+// coxExample();

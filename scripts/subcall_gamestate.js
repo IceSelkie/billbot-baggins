@@ -9,7 +9,6 @@ emptyArrays=(n)=>new Array(n).fill(null).map(_=>[]);
 // Other known issues:
 //  - Sudoku playable cards don't get updated correctly
 //  - Discarding a critcal doesnt correctly update trash or playable
-//  - Token count is not properly tracked
 class GameState {
   constructor(vari, dvari, playerNames, ourPlayerIndex=-1) {
     if (vari instanceof String || typeof vari === 'string') {
@@ -80,7 +79,8 @@ class GameState {
     this.trash = 0n;
   }
 
-  serverTurn(){
+  serverTurn(action){
+    if (action?.currentPlayerIndex === -1) return;
     if (this.gameOver) throw new Error(`Game already ended. Cannot further update game!`);
 
     this.turn++;
@@ -173,12 +173,17 @@ class GameState {
     if (suitIndex !== -1) {
       card.suitIndex = suitIndex;
       card.rank = rank;
+      // update tokens if visible
+      if (this.playPile[suitIndex].length === (this.variant.sudoku?this.ranks.length:5))
+        this.tokens += this.tokensPerDiscard;
     }
 
     // update public multiplicities
     // update playable
     this.updatePlayable(card);
-    // update trash
+    // update trash (simple)
+    if (suitIndex !== -1)
+      this.trash |= this.cardMasks[suitIndex][rank];
   }
 
   // clue
@@ -194,12 +199,13 @@ class GameState {
     // update card (cant update anything else)
     let hand = this.hands[target];
     let mask = this.clueMasks[clue.type][clue.value];
-    hand.filter(a=>list.includes(a.order)).forEach(card=>card.public &= mask);
+    hand.filter(a=>list.includes(a.order)).forEach(card=>{card.public &= mask; card.touched=true;});
     hand.filter(a=>!list.includes(a.order)).forEach(card=>card.public = card.public-(card.public&mask));
-    // hand.filter(a=>bits(a.public)===1).forEach(card=>{
-    //   card.suitIndex = ;
-    //   card.rank = ;
-    // })
+    hand.filter(a=>bits(a.public)===1).forEach(card=>{
+      let suit = this.cardMasks.find(suit=>suit.find(rankMask=>rankMask===card.public));
+      card.suitIndex = this.cardMasks.indexOf(suit);
+      card.rank = suit.indexOf(card.public);
+    })
   }
 
   // end game
