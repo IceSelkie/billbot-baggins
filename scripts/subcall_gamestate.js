@@ -1,5 +1,5 @@
 
-emptyArrays=(n)=>new Array(n).fill(null).map(_=>[]);
+emptyArrays = (n) => new Array(n).fill(null).map(_ => []);
 
 // Currently works with:
 //  - WS Games as history
@@ -10,11 +10,11 @@ emptyArrays=(n)=>new Array(n).fill(null).map(_=>[]);
 //  - Sudoku playable cards don't get updated correctly
 //  - Discarding a critcal doesnt correctly update trash or playable
 class GameState {
-  constructor(vari, dvari, playerNames, ourPlayerIndex=-1) {
+  constructor(vari, dvari, playerNames, ourPlayerIndex = -1) {
     if (vari instanceof String || typeof vari === 'string') {
-      ourPlayerIndex = playerNames??-1; playerNames = dvari;
-      dvari =       v.find(a=>a.name===vari || a.id==vari);
-      vari = variants.find(a=>a.name===vari || a.id==vari);
+      ourPlayerIndex = playerNames ?? -1; playerNames = dvari;
+      dvari = v.find(a => a.name === vari || a.id == vari);
+      vari = variants.find(a => a.name === vari || a.id == vari);
     }
     this.ai = null;
     this.variant = vari; // has flags and card information
@@ -24,7 +24,7 @@ class GameState {
 
     this.currentPlayerIndex = -1; // start at -1 so first turn increments to 0
     this.ourPlayerIndex = ourPlayerIndex;
-    this.shouldPlay = ourPlayerIndex!==-1;
+    this.shouldPlay = ourPlayerIndex !== -1;
 
     this.suits = [...dvari.suits];
     this.ranks = [...dvari.ranks];
@@ -33,57 +33,57 @@ class GameState {
     this.tokensPerDiscard = (vari.clueStarved ? 0.5 : 1);
 
     this.cardMasks = emptyArrays(this.suits.length);
-    this.clueMasks = [[],[]];
+    this.clueMasks = [[], []];
     this.cardMaskUnknown = BigInt(dvari.cardMaskUnknown);
 
     this.turn = 0;
-    this.tokens= 8;
-    this.strikes= 0;
+    this.tokens = 8;
+    this.strikes = 0;
     this.gameOver = null;
 
     this.discardPile = [];
     this.playPile = emptyArrays(this.suits.length);
     this.hands = emptyArrays(this.numPlayers);
 
-    this.playable= 0n;
-    this.trash= 0n;
+    this.playable = 0n;
+    this.trash = 0n;
     this.publicMultiplicities = emptyArrays(this.suits.length);
     this.privateMultiplicities = emptyArrays(this.suits.length);
 
-    dvari.cardMasks.split(",").map(a=>a.split(":")).map(([[s,r],mask])=>{this.cardMasks[this.suits.indexOf(s)][r]=BigInt(mask)});
-    dvari.clueMasks.split(",").map(t=>t.split(":")).map(([c,mask])=>{
+    dvari.cardMasks.split(",").map(a => a.split(":")).map(([[s, r], mask]) => { this.cardMasks[this.suits.indexOf(s)][r] = BigInt(mask) });
+    dvari.clueMasks.split(",").map(t => t.split(":")).map(([c, mask]) => {
       if (this.suits.includes(c))
         this.clueMasks[0][this.suits.indexOf(c)] = BigInt(mask);
       else
         this.clueMasks[1][c] = BigInt(mask);
     });
-    dvari.cards.split(",").map(([s,r])=>{
+    dvari.cards.split(",").map(([s, r]) => {
       let suitIndex = this.suits.indexOf(s);
       this.privateMultiplicities[suitIndex][r] =
-      this.publicMultiplicities[suitIndex][r] = (this.publicMultiplicities[suitIndex][r]??0)+1;
+        this.publicMultiplicities[suitIndex][r] = (this.publicMultiplicities[suitIndex][r] ?? 0) + 1;
     });
 
-    this.playable = this.variant.suits.map(suit=>
-      this.variant.sudoku?
-        this.ranks:
-      this.variant.upOrDown?
-        [1,5,7]:
-      suit.reversed?
-        [5]:
-      [1]
-    ).flatMap((ranks,suitIndex)=>
-      ranks.map(rank=>this.cardMasks[suitIndex][rank])
-    ).reduce((c,n)=>c|n,0n);
+    this.playable = this.variant.suits.map(suit =>
+      this.variant.sudoku ?
+        this.ranks :
+        this.variant.upOrDown ?
+          [1, 5, 7] :
+          suit.reversed ?
+            [5] :
+            [1]
+    ).flatMap((ranks, suitIndex) =>
+      ranks.map(rank => this.cardMasks[suitIndex][rank])
+    ).reduce((c, n) => c | n, 0n);
     this.trash = 0n;
   }
 
-  serverTurn(action){
+  serverTurn(action) {
     if (action?.currentPlayerIndex === -1) return;
     if (this.gameOver) throw new Error(`Game already ended. Cannot further update game!`);
 
     this.turn++;
-    this.currentPlayerIndex = (this.currentPlayerIndex+1)%this.numPlayers;
-    console.log("Turn increments to turn",this.turn,'which is now player',this.currentPlayerIndex, `(${this.playerNames[this.currentPlayerIndex]})'s turn.`);
+    this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.numPlayers;
+    console.log("Turn increments to turn", this.turn, 'which is now player', this.currentPlayerIndex, `(${this.playerNames[this.currentPlayerIndex]})'s turn.`);
     if (this.currentPlayerIndex == this.ourPlayerIndex) {
       console.log('It is now our turn...');
       if (!this.shouldPlay)
@@ -94,23 +94,23 @@ class GameState {
         this.ai.playerTurn();
     }
   }
-  updatePlayable(card){
+  updatePlayable(card) {
     if (this.gameOver) throw new Error(`Game already ended. Cannot further update game!`);
 
     let cardMask = this.cardMasks[card.suitIndex][card.rank];
-    let suitMask = this.cardMasks[card.suitIndex].filter(a=>a).reduce((c,n)=>c|n,0n);
-    let played = this.playPile[card.suitIndex].map(a=>a.rank).join("");
+    let suitMask = this.cardMasks[card.suitIndex].filter(a => a).reduce((c, n) => c | n, 0n);
+    let played = this.playPile[card.suitIndex].map(a => a.rank).join("");
 
-    let sequences = (this.variant.upOrDown?["12345","72345","54321","74321"]:this.sudoku?(this.ranks.length==4?["1234","2341","3412","4123"]:["12345","23451","34512","45123","51234"]):this.variant.suits[card.suitIndex].reversed?["54321"]:["12345"]);
-    sequences = sequences.filter(s=>s.startsWith(played)).map(a=>a.slice(played.length)).filter(a=>a.length>0);
+    let sequences = (this.variant.upOrDown ? ["12345", "72345", "54321", "74321"] : this.sudoku ? (this.ranks.length == 4 ? ["1234", "2341", "3412", "4123"] : ["12345", "23451", "34512", "45123", "51234"]) : this.variant.suits[card.suitIndex].reversed ? ["54321"] : ["12345"]);
+    sequences = sequences.filter(s => s.startsWith(played)).map(a => a.slice(played.length)).filter(a => a.length > 0);
 
-    let nextPlayable = sequences.map(a=>a[0]).map(a=>this.cardMasks[card.suitIndex][a]).reduce((c,n)=>c|n,0n);
-    let eventuallyPlayable = sequences.flatMap(a=>a[0]).map(a=>this.cardMasks[card.suitIndex][a]).reduce((c,n)=>c|n,0n);
+    let nextPlayable = sequences.map(a => a[0]).map(a => this.cardMasks[card.suitIndex][a]).reduce((c, n) => c | n, 0n);
+    let eventuallyPlayable = sequences.flatMap(a => a[0]).map(a => this.cardMasks[card.suitIndex][a]).reduce((c, n) => c | n, 0n);
 
-    this.playable = this.playable - (this.playable&suitMask) + nextPlayable;
+    this.playable = this.playable - (this.playable & suitMask) + nextPlayable;
   }
 
-  serverDraw({order, playerIndex, suitIndex, rank}) {
+  serverDraw({ order, playerIndex, suitIndex, rank }) {
     if (this.gameOver) throw new Error(`Game already ended. Cannot further update game!`);
 
     // Spectating historical games from a point of view should still conceal the cards
@@ -118,7 +118,7 @@ class GameState {
       suitIndex = -1; rank = -1;
     }
 
-    const card = { order, suitIndex, rank, public:this.cardMaskUnknown, touched:false, publiclyKnown:false, privatelyKnown:false };
+    const card = { order, suitIndex, rank, public: this.cardMaskUnknown, touched: false, publiclyKnown: false, privatelyKnown: false };
     this.hands[playerIndex].push(card);
 
     // Update private multiplicities
@@ -132,18 +132,18 @@ class GameState {
 
     // Last Player's hand is now full -> now its time for first player to play!
     // This might not be needed for live games... tbd
-    if (this.turn===0 && playerIndex === this.numPlayers-1)
+    if (this.turn === 0 && playerIndex === this.numPlayers - 1)
       if (this.hands[playerIndex].length === this.hands[0].length)
         this.serverTurn();
   }
 
-  serverDiscard({order, playerIndex, suitIndex, rank}) {
+  serverDiscard({ order, playerIndex, suitIndex, rank }) {
     if (this.gameOver) throw new Error(`Game already ended. Cannot further update game!`);
 
     let hand = this.hands[playerIndex];
-    let card = hand.find(c=>c.order === order);
+    let card = hand.find(c => c.order === order);
     let cardIndex = hand.indexOf(card);
-    hand.splice(cardIndex,1);
+    hand.splice(cardIndex, 1);
     this.discardPile.push(card);
     this.tokens += this.tokensPerDiscard;
 
@@ -175,27 +175,27 @@ class GameState {
     let newIdentities = 0;
     let eliminations = 0;
 
-    this.cardMaskUnknown = this.publicMultiplicities.flatMap((sm,suitIndex)=>sm.map((mult,rank)=>mult?this.cardMasks[suitIndex][rank]:0n)).reduce((c,n)=>c|n,0n);
+    this.cardMaskUnknown = this.publicMultiplicities.flatMap((sm, suitIndex) => sm.map((mult, rank) => mult ? this.cardMasks[suitIndex][rank] : 0n)).reduce((c, n) => c | n, 0n);
     // let multMaskPriv = this.privateMultiplicities.flatMap((sm,suitIndex)=>sm.map((mult,rank)=>mult?this.cardMasks[suitIndex][rank]:0n)).reduce((c,n)=>c|n,0n);
 
-        // console.log({publicUnknown:this.publicMultiplicities.flat().reduce((c,n)=>c+n,0),privateUnknown:this.privateMultiplicities.flat().reduce((c,n)=>c+n,0)});
-        // console.log(displayRow([this.playable,this.trash,multiplicitiesToMaskList(this.publicMultiplicities),this.cardMaskUnknown,multiplicitiesToMaskList(this.privateMultiplicities)],this.suits.length,this.ranks.length));
+    // console.log({publicUnknown:this.publicMultiplicities.flat().reduce((c,n)=>c+n,0),privateUnknown:this.privateMultiplicities.flat().reduce((c,n)=>c+n,0)});
+    // console.log(displayRow([this.playable,this.trash,multiplicitiesToMaskList(this.publicMultiplicities),this.cardMaskUnknown,multiplicitiesToMaskList(this.privateMultiplicities)],this.suits.length,this.ranks.length));
 
-    this.hands.forEach((hand,hi)=>{
-          // console.log("\n"+displayRow(this.hands[hi].map(a=>a.public),this.suits.length,this.ranks.length));
-      hand.forEach((card,ci)=>{
+    this.hands.forEach((hand, hi) => {
+      // console.log("\n"+displayRow(this.hands[hi].map(a=>a.public),this.suits.length,this.ranks.length));
+      hand.forEach((card, ci) => {
         if (card.publiclyKnown) return;
 
         let newMask = card.public & this.cardMaskUnknown;
         // if (newMask != card.public) console.log(card.order,":",card.public,"->",newMask,"by subtracting",card.public-newMask);
-        if (newMask === 0n) console.error("####ERROR####","card & cardMaskUnknown result in no possibilities!!!",{order:card.order,originalMask:card.public,publicMultMask:this.cardMaskUnknown,holder:this.playerNames[hi],handIndex:[hi,ci],turn:this.turn});
+        if (newMask === 0n) console.error("####ERROR####", "card & cardMaskUnknown result in no possibilities!!!", { order: card.order, originalMask: card.public, publicMultMask: this.cardMaskUnknown, holder: this.playerNames[hi], handIndex: [hi, ci], turn: this.turn });
         card.public = newMask;
         // let privateMask = card.public & multMaskPriv;
 
-        if (bits(card.public)===1) {
+        if (bits(card.public) === 1) {
           // If its private identity is not known, update
           if (card.suitIndex === -1) {
-            let suit = this.cardMasks.find(suit=>suit.find(rankMask=>rankMask===card.public));
+            let suit = this.cardMasks.find(suit => suit.find(rankMask => rankMask === card.public));
             card.suitIndex = this.cardMasks.indexOf(suit);
             card.rank = suit.indexOf(card.public);
             this.privateMultiplicities[card.suitIndex][card.rank]--;
@@ -212,24 +212,24 @@ class GameState {
             eliminations++;
 
           if (this.privateMultiplicities[card.suitIndex][card.rank] < 0 || this.publicMultiplicities[card.suitIndex][card.rank] < 0)
-            console.error("####ERROR####","A multiplicity became negative!!!",{suitIndex:card.suitIndex,rank:card.rank,publicMultiplicities:this.publicMultiplicities[card.suitIndex][card.rank],privateMultiplicities:this.privateMultiplicities[card.suitIndex][card.rank],turn:this.turn});
+            console.error("####ERROR####", "A multiplicity became negative!!!", { suitIndex: card.suitIndex, rank: card.rank, publicMultiplicities: this.publicMultiplicities[card.suitIndex][card.rank], privateMultiplicities: this.privateMultiplicities[card.suitIndex][card.rank], turn: this.turn });
         }
       });
     });
 
     if (eliminations) {
-      console.log(newIdentities,"new identities now known! Propogating empathy for",eliminations,"types...");
+      console.log(newIdentities, "new identities now known! Propogating empathy for", eliminations, "types...");
       this.updateEmpathy();
     }
   }
 
-  serverPlay({order, playerIndex, suitIndex, rank}) {
+  serverPlay({ order, playerIndex, suitIndex, rank }) {
     if (this.gameOver) throw new Error(`Game already ended. Cannot further update game!`);
 
     let hand = this.hands[playerIndex];
-    let card = hand.find(c=>c.order === order);
+    let card = hand.find(c => c.order === order);
     let cardIndex = hand.indexOf(card);
-    hand.splice(cardIndex,1);
+    hand.splice(cardIndex, 1);
     this.playPile[suitIndex].push(card);
 
     // If card identity is now known, update things:
@@ -253,7 +253,7 @@ class GameState {
       card.rank = rank;
 
       // update tokens (tiiah excempt)
-      if (this.playPile[suitIndex].length === (this.variant.sudoku?this.ranks.length:5))
+      if (this.playPile[suitIndex].length === (this.variant.sudoku ? this.ranks.length : 5))
         this.tokens += this.tokensPerDiscard;
       if (this.tokens > 8) {
         this.tokens = 8;
@@ -269,22 +269,22 @@ class GameState {
   }
 
   // clue
-  serverClue({clue, target, list}) {
+  serverClue({ clue, target, list }) {
     if (this.gameOver) throw new Error(`Game already ended. Cannot further update game!`);
 
     this.tokens--;
 
     // Do Hatguessing Logic Here
     if (this.ai)
-      this.ai.playerInterpretClue({clue,target,list});
+      this.ai.playerInterpretClue({ clue, target, list });
 
     // update card (cant update anything else)
     let hand = this.hands[target];
     let mask = this.clueMasks[clue.type][clue.value];
     // Apply positive information
-    hand.filter(a=>list.includes(a.order)).forEach(card=>{card.public &= mask; card.touched=true;});
+    hand.filter(a => list.includes(a.order)).forEach(card => { card.public &= mask; card.touched = true; });
     // Apply negative information
-    hand.filter(a=>!list.includes(a.order)).forEach(card=>card.public = card.public-(card.public&mask));
+    hand.filter(a => !list.includes(a.order)).forEach(card => card.public = card.public - (card.public & mask));
 
     // Update card identities and multiplicities
     this.updateEmpathy();
@@ -297,27 +297,27 @@ class GameState {
     // lock the game
     this.gameOver = action;
     // display end message
-    console.log("Game has ended!",action);
+    console.log("Game has ended!", action);
   }
 
   // strike
-  serverStrike({num}){
+  serverStrike({ num }) {
     if (this.gameOver) throw new Error(`Game already ended. Cannot further update game!`);
 
     this.strikes++;
-    if (this.strikes!==num)
+    if (this.strikes !== num)
       throw new Error(`Local strike count ${this.strikes} and server strike count (${num}) do not match!`);
-    
+
     // The associated discard isn't real
     this.tokens -= this.tokensPerDiscard;
   }
 
   // ensure turn counter, strikes, clues, timing, etc. are still up to date
-  serverOther(){};
+  serverOther() { };
 
-  clientPlay({order}){throw new Error('Method "clientPlay" not implemented');}
-  clientDiscard({order}){throw new Error('Method "clientDiscard" not implemented');}
-  clientClue({target, clue}){throw new Error('Method "clientClue" not implemented');}
+  clientPlay({ order }) { throw new Error('Method "clientPlay" not implemented'); }
+  clientDiscard({ order }) { throw new Error('Method "clientDiscard" not implemented'); }
+  clientClue({ target, clue }) { throw new Error('Method "clientClue" not implemented'); }
 }
 
 
@@ -327,12 +327,12 @@ class GameState {
 
 
 
-bits=(int)=>{
+bits = (int) => {
   int = BigInt(int);
-  let ret=0n;
+  let ret = 0n;
   while (int) {
-    ret += int%2n;
-    int>>=1n;
+    ret += int % 2n;
+    int >>= 1n;
   }
   return Number(ret);
 }
