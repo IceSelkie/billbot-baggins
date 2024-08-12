@@ -1,15 +1,10 @@
 {
   "name": "billbot-baggins",
   "version": "1.0.0",
-  "description": "A Hanabi bot written from scratch in TypeScript",
-  "main": "main.ts",
-  "scripts": {
-    "build": "tsc",
-    "start": "tsc --noEmit && ts-node src/index.ts"
-  },
-  "author": "",
+  "description": "A Hanabi bot written from scratch in NodeJS, named after WillFlame's Will-Bot",
+  "main": "0_start_bot.ts",
+  "author": "IceSelkie",
   "dependencies": {
-    "@types/node": "^22.0.0",
     "ws": "^8.18.0"
   }
 }
