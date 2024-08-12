@@ -12,11 +12,9 @@ emptyArrays=(n)=>new Array(n).fill(null).map(_=>[]);
 class GameState {
   constructor(vari, dvari, playerNames, ourPlayerIndex=-1) {
     if (vari instanceof String || typeof vari === 'string') {
-      console.log('input',{playerNames,ourPlayerIndex});
       ourPlayerIndex = playerNames??-1; playerNames = dvari;
       dvari =       v.find(a=>a.name===vari || a.id==vari);
       vari = variants.find(a=>a.name===vari || a.id==vari);
-      console.log('saved',{playerNames,ourPlayerIndex});
     }
     this.ai = null;
     this.variant = vari; // has flags and card information
@@ -115,12 +113,22 @@ class GameState {
   serverDraw({order, playerIndex, suitIndex, rank}) {
     if (this.gameOver) throw new Error(`Game already ended. Cannot further update game!`);
 
-    const card = { order, suitIndex, rank , public:this.cardMaskUnknown };
+    // Spectating historical games from a point of view should still conceal the cards
+    if (playerIndex === this.ourPlayerIndex) {
+      suitIndex = -1; rank = -1;
+    }
+
+    const card = { order, suitIndex, rank, public:this.cardMaskUnknown, touched:false, publiclyKnown:false, privatelyKnown:false };
     this.hands[playerIndex].push(card);
 
     // Update private multiplicities
-    if (suitIndex !== -1)
+    if (suitIndex !== -1) {
       this.privateMultiplicities[suitIndex][rank]--;
+      card.privatelyKnown = true;
+    }
+
+    if (this.turn !== 0)
+      this.updateEmpathy();
 
     // Last Player's hand is now full -> now its time for first player to play!
     // This might not be needed for live games... tbd
@@ -142,14 +150,17 @@ class GameState {
     // If card identity is now known, update things:
     if (suitIndex !== -1) {
 
-      // update private multiplicities
-      if (card.suitIndex === -1)
+      // if we didnt know the card, update private multiplicities
+      if (card.suitIndex === -1) {
         this.privateMultiplicities[suitIndex][rank]--;
+        card.privatelyKnown = true;
+      }
 
-      // update public multiplicities
+      // if everyone didnt know the card, update public multiplicities
       if (card.public !== this.cardMasks[suitIndex][rank]) {
         this.publicMultiplicities[suitIndex][rank]--;
         card.public = this.cardMasks[suitIndex][rank];
+        card.publiclyKnown = true;
       }
 
       // Update private knowledge with card identity
@@ -158,6 +169,58 @@ class GameState {
     }
 
     // update eventually playable (may update playable and trash)
+  }
+
+  updateEmpathy() {
+    let newIdentities = 0;
+    let eliminations = 0;
+
+    this.cardMaskUnknown = this.publicMultiplicities.flatMap((sm,suitIndex)=>sm.map((mult,rank)=>mult?this.cardMasks[suitIndex][rank]:0n)).reduce((c,n)=>c|n,0n);
+    // let multMaskPriv = this.privateMultiplicities.flatMap((sm,suitIndex)=>sm.map((mult,rank)=>mult?this.cardMasks[suitIndex][rank]:0n)).reduce((c,n)=>c|n,0n);
+
+        // console.log({publicUnknown:this.publicMultiplicities.flat().reduce((c,n)=>c+n,0),privateUnknown:this.privateMultiplicities.flat().reduce((c,n)=>c+n,0)});
+        // console.log(displayRow([this.playable,this.trash,multiplicitiesToMaskList(this.publicMultiplicities),this.cardMaskUnknown,multiplicitiesToMaskList(this.privateMultiplicities)],this.suits.length,this.ranks.length));
+
+    this.hands.forEach((hand,hi)=>{
+          // console.log("\n"+displayRow(this.hands[hi].map(a=>a.public),this.suits.length,this.ranks.length));
+      hand.forEach((card,ci)=>{
+        if (card.publiclyKnown) return;
+
+        let newMask = card.public & this.cardMaskUnknown;
+        // if (newMask != card.public) console.log(card.order,":",card.public,"->",newMask,"by subtracting",card.public-newMask);
+        if (newMask === 0n) console.error("####ERROR####","card & cardMaskUnknown result in no possibilities!!!",{order:card.order,originalMask:card.public,publicMultMask:this.cardMaskUnknown,holder:this.playerNames[hi],handIndex:[hi,ci],turn:this.turn});
+        card.public = newMask;
+        // let privateMask = card.public & multMaskPriv;
+
+        if (bits(card.public)===1) {
+          // If its private identity is not known, update
+          if (card.suitIndex === -1) {
+            let suit = this.cardMasks.find(suit=>suit.find(rankMask=>rankMask===card.public));
+            card.suitIndex = this.cardMasks.indexOf(suit);
+            card.rank = suit.indexOf(card.public);
+            this.privateMultiplicities[card.suitIndex][card.rank]--;
+            card.privatelyKnown = true;
+            if (this.privateMultiplicities[card.suitIndex][card.rank] === 0)
+              eliminations++;
+          }
+          // Everyone now knows what this card is
+          this.publicMultiplicities[card.suitIndex][card.rank]--;
+          card.publiclyKnown = true;
+
+          newIdentities++;
+          if (this.publicMultiplicities[card.suitIndex][card.rank] === 0)
+            eliminations++;
+
+          if (this.privateMultiplicities[card.suitIndex][card.rank] < 0 || this.publicMultiplicities[card.suitIndex][card.rank] < 0)
+            console.error("####ERROR####","A multiplicity became negative!!!",{suitIndex:card.suitIndex,rank:card.rank,publicMultiplicities:this.publicMultiplicities[card.suitIndex][card.rank],privateMultiplicities:this.privateMultiplicities[card.suitIndex][card.rank],turn:this.turn});
+        }
+      });
+    });
+
+    if (eliminations) {
+      console.log(newIdentities,"new identities now known! Propogating empathy for",eliminations,"types...");
+      this.updateEmpathy();
+    }
   }
 
   serverPlay({order, playerIndex, suitIndex, rank}) {
@@ -169,16 +232,35 @@ class GameState {
     hand.splice(cardIndex,1);
     this.playPile[suitIndex].push(card);
 
-    // Update public knowledge with card identity
+    // If card identity is now known, update things:
     if (suitIndex !== -1) {
+
+      // if we didnt know the card, update private multiplicities
+      if (card.suitIndex === -1) {
+        this.privateMultiplicities[suitIndex][rank]--;
+        card.privatelyKnown = true;
+      }
+
+      // if everyone didnt know the card, update public multiplicities
+      if (card.public !== this.cardMasks[suitIndex][rank]) {
+        this.publicMultiplicities[suitIndex][rank]--;
+        card.public = this.cardMasks[suitIndex][rank];
+        card.publiclyKnown = true;
+      }
+
+      // Update private knowledge with card identity
       card.suitIndex = suitIndex;
       card.rank = rank;
-      // update tokens if visible
+
+      // update tokens (tiiah excempt)
       if (this.playPile[suitIndex].length === (this.variant.sudoku?this.ranks.length:5))
         this.tokens += this.tokensPerDiscard;
+      if (this.tokens > 8) {
+        this.tokens = 8;
+        // this.pace--;
+      }
     }
 
-    // update public multiplicities
     // update playable
     this.updatePlayable(card);
     // update trash (simple)
@@ -199,13 +281,13 @@ class GameState {
     // update card (cant update anything else)
     let hand = this.hands[target];
     let mask = this.clueMasks[clue.type][clue.value];
+    // Apply positive information
     hand.filter(a=>list.includes(a.order)).forEach(card=>{card.public &= mask; card.touched=true;});
+    // Apply negative information
     hand.filter(a=>!list.includes(a.order)).forEach(card=>card.public = card.public-(card.public&mask));
-    hand.filter(a=>bits(a.public)===1).forEach(card=>{
-      let suit = this.cardMasks.find(suit=>suit.find(rankMask=>rankMask===card.public));
-      card.suitIndex = this.cardMasks.indexOf(suit);
-      card.rank = suit.indexOf(card.public);
-    })
+
+    // Update card identities and multiplicities
+    this.updateEmpathy();
   }
 
   // end game
@@ -231,36 +313,7 @@ class GameState {
   }
 
   // ensure turn counter, strikes, clues, timing, etc. are still up to date
-  serverAction(action){
-    console.log("Passed action with",action.type);
-    if (action.type==="draw")
-      this.serverDraw(action);
-    if (action.type==="play")
-      this.serverPlay(action);
-    if (action.type==="clue")
-      this.serverClue(action);
-    if (action.type==="discard")
-      this.serverDiscard(action);
-    if (action.type==="strike")
-      this.serverStrike(action);
-
-    if (action.type==="status")
-    //   this.serverStatus(action);
-      console.log(`Current state:`,JSON.stringify({turn:this.turn, tokens:this.tokens, strikes:this.strikes, playable:bits(this.playable), trash:bits(this.trash), playPile:this.playPile.map(a=>a?.length), discardPile:this.discardPile.length,hands:this.hands.map(hand=>hand.map(c=>bits(c.public)))}));
-    if (action.type==="gameOver")
-      this.serverGameOver(action);
-    if (action.type==="turn")
-      this.serverTurn(action);
-  }
-  serverActionList(actionList) {
-    const shouldPlay = this.shouldPlay;
-    this.shouldPlay = false;
-    actionList.forEach((action,i)=>{
-      // reenable actions on last action
-      if (i == actionList.length-1) this.shouldPlay = shouldPlay;
-      this.serverAction(action);
-    });
-  }
+  serverOther(){};
 
   clientPlay({order}){throw new Error('Method "clientPlay" not implemented');}
   clientDiscard({order}){throw new Error('Method "clientDiscard" not implemented');}

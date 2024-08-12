@@ -3,10 +3,10 @@ DEBUG = true;
 
 // Proxy will connect to hanab.live
 // It will initialize games on "init" dispatches
-// It will keep the game state updated with "" and ""
+// It will keep the game state updated with "gameAction" and "gameActionList"
 // It will ask for plays when it is our turn
-// It will end games on ""
-// It will ignore all else (directives to join tables and respond to commands should be handled elsewhere)
+// It will end games on "gameOver"
+// It will also manage the bot and coordinate joining, spectating, and starting games.
 
 
 class RemoteProxy {
@@ -76,9 +76,9 @@ class RemoteProxy {
     if (type === "init")
       { this.gameState = this.createGameState(data); console.log(`Initializing game with ${data.hasCustomSeed?"custom seed":"seed"} ${JSON.stringify(data.seed)}.`); }
     if (type === "gameAction")
-      this.gameState.serverAction(data.action);
+      this.serverAction(data.action);
     if (type === "gameActionList")
-      this.gameState.serverActionList(data.list);
+      this.serverActionList(data.list);
   }
   handleCommand({msg, who, recipient}) {
     // Set commander from PMs only.
@@ -99,15 +99,62 @@ class RemoteProxy {
       this.send("tableUnattend",{tableID:this.tableID});
       this.send("tableReattend",{tableID:this.tableID});
     }
+    if (message[0] === "/spectate")
+      this.send("tableSpectate",{tableID:this.usersToTables.get(who),shadowingPlayerIndex:Number(message[1]??-1)});
+    if (message[0] === "/unattend")
+      { this.send("tableUnattend",{tableID:this.tableID}); this.tableID=null; this.gameState=null; }
   }
   createGameState(init) {
     const gameState = new GameState(init.options.variantName, init.playerNames, init.ourPlayerIndex);
+    if (init.ourPlayerIndex != init.playerNames.indexOf(this.welcome.username)) {
+      console.error("Our player index does not match our name index!",JSON.stringify({ourPlayerIndex:init.ourPlayerIndex,myName:this.welcome.username,playerNames:init.playerNames}));
+      gameState.shouldPlay = false;
+    }
     gameState.clientPlay=(order)=>{this.send("action",{tableID:this.tableID,type:0,target:order});}
     gameState.clientDiscard=(order)=>{this.send("action",{tableID:this.tableID,type:1,target:order});}
     gameState.clientClueColor=(playerIndex,color)=>{this.send("action",{tableID:this.tableID,type:2,target:playerIndex,value:color});}
     gameState.clientClueRank=(playerIndex,rank)=>{this.send("action",{tableID:this.tableID,type:3,target:playerIndex,value:rank});}
     gameState.ai = new CoxAI(gameState);
+    gameState.actionListReceived = false;
+    gameState.actionQueue = [];
     return gameState;
+  }
+  serverAction(action){
+    if (!this.gameState.actionListReceived) {
+      this.gameState.actionQueue.push(action);
+      return;
+    }
+
+    if (action.type==="draw")
+      this.gameState.serverDraw(action);
+    if (action.type==="play")
+      this.gameState.serverPlay(action);
+    if (action.type==="clue")
+      this.gameState.serverClue(action);
+    if (action.type==="discard")
+      this.gameState.serverDiscard(action);
+    if (action.type==="strike")
+      this.gameState.serverStrike(action);
+
+    if (action.type==="status")
+    //   this.gameState.serverStatus(action);
+      console.log(`Current state:`,JSON.stringify({turn:this.gameState.turn, tokens:this.gameState.tokens, strikes:this.gameState.strikes, playable:bits(this.gameState.playable), trash:bits(this.gameState.trash), playPile:this.gameState.playPile.map(a=>a?.length), discardPile:this.gameState.discardPile.length,hands:this.gameState.hands.map(hand=>hand.map(c=>bits(c.public)))}));
+    if (action.type==="gameOver")
+      this.gameState.serverGameOver(action);
+    if (action.type==="turn")
+      this.gameState.serverTurn(action);
+  }
+  serverActionList(actionList) {
+    const shouldPlay = this.shouldPlay;
+    this.shouldPlay = false;
+    actionList.forEach((action,i)=>{
+      // reenable actions on last action
+      if (i == actionList.length-1) this.shouldPlay = shouldPlay;
+      this.serverAction(action);
+    });
+    this.gameState.actionListReceived = true;
+    this.gameState.actionQueue.forEach(action=>this.serverAction(action));
+    this.gameState.actionQueue = null;
   }
 }
 
