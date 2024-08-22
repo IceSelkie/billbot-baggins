@@ -63,33 +63,26 @@ knownHandModulo(hand, qty, playable, trash) {
   return submasks.indexOf(submasks.find(mask=>mask&trueMask));
 }
 
+identifyValidHints() {
+  return this.gameState.playerNames.map((_,i)=>i===this.gameState.ourPlayerIndex?[]:[0, 1]); // color and rank
+}
+
 playerTurn(){
   console.log("Took action with priorty",this.coxAction());
 }
 coxAction(){
-  let gameState = this.gameState;
-  // playerTurn(){
-  //   console.log("Looking to play...");
-  let myHand = gameState.hands[gameState.ourPlayerIndex];
-  //   let handPlayable = myHand.filter(card=>(card.public&this.gameState.playable) == card.public);
-  //   if (handPlayable.length) {
-  //     this.gameState.clientPlay(handPlayable[0].order);
-  //     return;
-  //   }
-  //   if (this.gameState.tokens<=7) {
-  //     console.log("Idk what to do, so discarding oldest card...");
-  //     this.gameState.clientDiscard(myHand[0].order);
-  //   } else {
-  //     console.log("Idk what to do, so playing slot 1...");
-  //     this.gameState.clientPlay(myHand[myHand.length-1].order);
-  //   }
-  // }
-  const cardPlayable = card=>(card.public&gameState.playable) == card.public;
-  const cardTrash = card=>(card.public&gameState.trash) == card.public;
-  const discardAllowed = gameState.tokens<=7;
+  const gameState = this.gameState;
+  const {playable, trash, ourPlayerIndex} = gameState;
+  const myHand = gameState.hands[ourPlayerIndex];
+
+  const cardPlayable = card=>(card.public&playable) == card.public;
+  const cardTrash = card=>(card.public&trash) == card.public;
+
+  let discardAllowed = gameState.tokens<=7;
+  let myHandPlayable = myHand.filter(cardPlayable);
+  let myHandTrash = myHand.filter(cardTrash);
 
   // Priority 1: playable card
-  let myHandPlayable = myHand.filter(cardPlayable);
   if (myHandPlayable.length) {
     // play lowest rank, or oldest card
     let toPlay = myHandPlayable.reduce((cont,card)=>card.rank<cont[0]?[card.rank,card]:cont,[Infinity,{order:-1}])[1];
@@ -99,7 +92,6 @@ coxAction(){
   }
 
   // Priority 2: Early discard
-  let myHandTrash = myHand.filter(cardTrash);
   if (gameState.discardPile.length<5 && myHandTrash.length && discardAllowed) {
     // discard oldest trash
     gameState.clientDiscard(myHandTrash[0].order);
@@ -108,9 +100,26 @@ coxAction(){
 
   // Priority 3: Hint
   if (gameState.tokens>=1) {
-    // give hatguess hint
-    // return 3;
+    let allowedHints = this.identifyValidHints().flatMap((hs,i)=>hs.map(h=>[i,h]));
+    let qty = allowedHints.length;
+    if (qty >= 4) {
+      // give hatguess hint
+      let modulo = this.gameState.hands.map((h,i)=>i===ourPlayerIndex?0:this.knownHandModulo(h,qty,playable,trash));
+      modulo = modulo.reduce((c,n)=>(c+n)%qty,0);
+      let [target, type] = allowedHints[modulo];
 
+      let targetTrueMasks = gameState.hands[target].map(c=>gameState.cardMasks[c.suitIndex][c.rank]);
+      let allowedClues = gameState.clueMasks[type].map((mask,value)=>[value,mask]).filter(([value,mask])=>targetTrueMasks.find(c=>c&mask)).map(([value,mask])=>value);
+
+      if (type === 0)
+        gameState.clientClueColor({target,type,value:allowedClues[0]});
+      else if (type === 1)
+        gameState.clientClueColor({target,type,value:0});
+      else
+        throw new Error("Not Implemented Yet: cox priority 3");
+
+      return 3;
+    }
     console.log("Failed to find suitable hatguess hint...");
   }
 
@@ -163,12 +172,24 @@ getHatguessHint() {
   let hInds = hands.map((_,i)=>i);
   hInds.splice(currentPlayerIndex,1);
 
-  let focuses = hInds.map(hi=>CoxAI.handFocusCox(hands[hi].map(c=>c.public), playable));
+  let focuses = hInds.map((hi,_)=>CoxAI.handFocusCox(hands[hi].map(c=>c.public), playable));
   let submasks = hInds.map((hi,i)=>CoxAI.submasksCox(hands[hi][focuses[i]], (this.gameState.numPlayers-1)*2, playable, trash));
   let modulos = hInds.map((hi,i)=>submasks[i]);
 }
 
-  playerInterpretClue({clue,target,list}){console.log("Not implemented!");}
+  playerInterpretClue({clue,target,list}){
+    // let qty = ;
+    // let actualModulo = ;
+    // let visibleModulo = this.gameState.hands.map((h,i)=>
+    //     i===ourPlayerIndex || i===target?
+    //     0:
+    //     this.knownHandModulo(h,qty,this.gameState.playable,this.gameState.trash)
+    //   );
+
+    // let myHandModulo = (actualModulo-visibleModulo+qty)%qty;
+
+    console.log("Not implemented!");
+  }
   playerInterpretDiscard(){}
   playerInterpretStrike(){}
   playerInterpretBlindplay(){}
