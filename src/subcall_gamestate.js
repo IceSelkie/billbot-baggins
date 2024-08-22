@@ -45,10 +45,12 @@ class GameState {
     this.playPile = emptyArrays(this.suits.length);
     this.hands = emptyArrays(this.numPlayers);
 
-    this.playable = 0n;
+    this.playable = 0n; // could be a "nFromPlayable" as an array of masks
     this.trash = 0n;
+    this.critical = 0n; // Will be updated in updateEmpathy before it is used
     this.publicMultiplicities = emptyArrays(this.suits.length);
     this.privateMultiplicities = emptyArrays(this.suits.length);
+    this.unplayedMultiplicities = emptyArrays(this.suits.length);
 
     dvari.cardMasks.split(",").map(a => a.split(":")).map(([[s, r], mask]) => { this.cardMasks[this.suits.indexOf(s)][r] = BigInt(mask) });
     dvari.clueMasks.split(",").map(t => t.split(":")).map(([c, mask]) => {
@@ -59,9 +61,16 @@ class GameState {
     });
     dvari.cards.split(",").map(([s, r]) => {
       let suitIndex = this.suits.indexOf(s);
-      this.privateMultiplicities[suitIndex][r] =
-        this.publicMultiplicities[suitIndex][r] = (this.publicMultiplicities[suitIndex][r] ?? 0) + 1;
+      this.publicMultiplicities[suitIndex][r] = (this.publicMultiplicities[suitIndex][r] ?? 0) + 1;
+      this.privateMultiplicities[suitIndex][r] = this.publicMultiplicities[suitIndex][r];
+      this.unplayedMultiplicities[suitIndex][r] = this.publicMultiplicities[suitIndex][r];
     });
+    // Update `this.critical` to initial state
+    this.unplayedMultiplicities.forEach((suit,suitIndex)=>suit?.forEach((cardMultiplicity,rank)=>{
+      if (cardMultiplicity === 1)
+        this.critical |= this.cardMasks[suitIndex][rank];
+    }));
+
 
     this.playable = this.variant.suits.map(suit =>
       this.variant.sudoku ?
@@ -179,6 +188,9 @@ class GameState {
         card.publiclyKnown = true;
       }
 
+      // Update played multiplicities regardless;
+      this.updateCriticals(suitIndex, rank);
+
       // Update private knowledge with card identity
       card.suitIndex = suitIndex;
       card.rank = rank;
@@ -239,6 +251,18 @@ class GameState {
     }
   }
 
+  updateCriticals(suitIndex, rank) {
+    // Update stored multiplicities
+    const newMultiplicity = --this.unplayedMultiplicities[suitIndex][rank];
+
+    // If it becomes critical, update
+    if (newMultiplicity === 1)
+      this.critical |= this.cardMasks[suitIndex][rank];
+
+    // Remove trash, as trash is never indispensable.
+    this.critical -= this.critical & this.trash;
+  }
+
   serverPlay({ order, playerIndex, suitIndex, rank }) {
     if (this.gameOver) throw new Error(`Game already ended. Cannot further update game!`);
 
@@ -263,6 +287,9 @@ class GameState {
         card.public = this.cardMasks[suitIndex][rank];
         card.publiclyKnown = true;
       }
+
+      // Update played multiplicities regardless;
+      this.updateCriticals(suitIndex, rank);
 
       // Update private knowledge with card identity
       card.suitIndex = suitIndex;
