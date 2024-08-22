@@ -101,13 +101,29 @@ class GameState {
     let suitMask = this.cardMasks[card.suitIndex].filter(a => a).reduce((c, n) => c | n, 0n);
     let played = this.playPile[card.suitIndex].map(a => a.rank).join("");
 
-    let sequences = (this.variant.upOrDown ? ["12345", "72345", "54321", "74321"] : this.sudoku ? (this.ranks.length == 4 ? ["1234", "2341", "3412", "4123"] : ["12345", "23451", "34512", "45123", "51234"]) : this.variant.suits[card.suitIndex].reversed ? ["54321"] : ["12345"]);
+    // What ranks can be played, and in what order(s), based on variant
+    let sequences = (this.variant.upOrDown ? ["12345", "72345", "54321", "74321"] : this.variant.sudoku ? (this.ranks.length == 4 ? ["1234", "2341", "3412", "4123"] : ["12345", "23451", "34512", "45123", "51234"]) : this.variant.suits[card.suitIndex].reversed ? ["54321"] : ["12345"]);
+    // Only keep the ones that match what has already been played in this suit.
+    // (Eg "54321" isnt valid if "7" has already been played, and will return ["2345","4321"])
     sequences = sequences.filter(s => s.startsWith(played)).map(a => a.slice(played.length)).filter(a => a.length > 0);
 
+    // Cards immediately playable of this rank
     let nextPlayable = sequences.map(a => a[0]).map(a => this.cardMasks[card.suitIndex][a]).reduce((c, n) => c | n, 0n);
+    // Cards that can still be played in the game (eg 345 and not 127 if "12" has been played)
     let eventuallyPlayable = sequences.flatMap(a => a[0]).map(a => this.cardMasks[card.suitIndex][a]).reduce((c, n) => c | n, 0n);
 
+    // Update this suit's playable mask.
     this.playable = this.playable - (this.playable & suitMask) + nextPlayable;
+
+    // For sudoku, we must prevent other suits from starting with the same rank
+    if (this.variant.sudoku && played.length === 1) {
+      // identify suits that havent started yet
+      let unstartedSuits = this.playPile.map((suitPlayPile,suitIndex)=>suitPlayPile.length===0?suitIndex:null).filter(a=>a!==null);
+      // remove this rank
+      unstartedSuits.forEach(suitIndex=>{
+        this.playable -= this.playable & this.cardMasks[suitIndex][played];
+      });
+    }
   }
 
   serverDraw({ order, playerIndex, suitIndex, rank }) {
