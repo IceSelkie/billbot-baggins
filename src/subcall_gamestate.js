@@ -34,6 +34,7 @@ class GameState {
 
     this.cardMasks = emptyArrays(this.suits.length);
     this.clueMasks = [[], []];
+    this.clueMasksStr = {};
     this.cardMaskUnknown = BigInt(dvari.cardMaskUnknown);
 
     this.turn = 0;
@@ -54,6 +55,7 @@ class GameState {
 
     dvari.cardMasks.split(",").map(a => a.split(":")).map(([[s, r], mask]) => { this.cardMasks[this.suits.indexOf(s)][r] = BigInt(mask) });
     dvari.clueMasks.split(",").map(t => t.split(":")).map(([c, mask]) => {
+      this.clueMasksStr[c] = BigInt(mask);
       if (this.suits.includes(c))
         this.clueMasks[0][this.suits.indexOf(c)] = BigInt(mask);
       else
@@ -206,11 +208,12 @@ class GameState {
     this.cardMaskUnknown = this.publicMultiplicities.flatMap((sm, suitIndex) => sm.map((mult, rank) => mult ? this.cardMasks[suitIndex][rank] : 0n)).reduce((c, n) => c | n, 0n);
     // let multMaskPriv = this.privateMultiplicities.flatMap((sm,suitIndex)=>sm.map((mult,rank)=>mult?this.cardMasks[suitIndex][rank]:0n)).reduce((c,n)=>c|n,0n);
 
-    // console.log({publicUnknown:this.publicMultiplicities.flat().reduce((c,n)=>c+n,0),privateUnknown:this.privateMultiplicities.flat().reduce((c,n)=>c+n,0)});
-    // console.log(displayRow([this.playable,this.trash,multiplicitiesToMaskList(this.publicMultiplicities),this.cardMaskUnknown,multiplicitiesToMaskList(this.privateMultiplicities)],this.suits.length,this.ranks.length));
+    console.log({publicUnknown:this.publicMultiplicities.flat().reduce((c,n)=>c+n,0),privateUnknown:this.privateMultiplicities.flat().reduce((c,n)=>c+n,0)});
+    console.log("Below is [playable, trash, critical, publicMultis, privateUnrevealeds, privateMultis]")
+    console.log(displayRow([this.playable,this.trash,this.critical,multiplicitiesToMaskList(this.publicMultiplicities),0n,multiplicitiesToMaskList(this.privateMultiplicities),this.cardMaskUnknown],this.suits.length,this.ranks.length));
 
     this.hands.forEach((hand, hi) => {
-      // console.log("\n"+displayRow(this.hands[hi].map(a=>a.public),this.suits.length,this.ranks.length));
+      console.log("\n"+displayRow(this.hands[hi].map(a=>a.public),this.suits.length,this.ranks.length));
       hand.forEach((card, ci) => {
         if (card.publiclyKnown) return;
 
@@ -318,8 +321,10 @@ class GameState {
     this.tokens--;
 
     // Do Hatguessing Logic Here
-    if (this.ai)
-      this.ai.playerInterpretClue({ clue, target, list });
+    if (this.ai) {
+      let givingPlayerIndex = this.currentPlayerIndex;
+      this.ai.playerInterpretClue({ clue, target, list }, givingPlayerIndex);
+    }
 
     // update card (cant update anything else)
     let hand = this.hands[target];

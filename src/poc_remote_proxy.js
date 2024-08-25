@@ -112,15 +112,16 @@ class RemoteProxy {
     }
     gameState.clientPlay=(order)=>{this.send("action",{tableID:this.tableID,type:0,target:order});}
     gameState.clientDiscard=(order)=>{this.send("action",{tableID:this.tableID,type:1,target:order});}
-    gameState.clientClueColor=(playerIndex,color)=>{this.send("action",{tableID:this.tableID,type:2,target:playerIndex,value:color});}
-    gameState.clientClueRank=(playerIndex,rank)=>{this.send("action",{tableID:this.tableID,type:3,target:playerIndex,value:rank});}
+    gameState.clientClue=({playerIndex,colorIndex,rank})=>colorIndex!==undefined?gameState.clientClueColor(playerIndex,colorIndex):gameState.clientClueRank(playerIndex,rank);
+    gameState.clientClueColor=(playerIndex,color)=>{this.send("action",{tableID:this.tableID,type:2,target:playerIndex,value:Number(color)});}
+    gameState.clientClueRank=(playerIndex,rank)=>{this.send("action",{tableID:this.tableID,type:3,target:playerIndex,value:Number(rank)});}
     gameState.ai = new CoxAI(gameState);
     gameState.actionListReceived = false;
     gameState.actionQueue = [];
     return gameState;
   }
-  serverAction(action){
-    if (!this.gameState.actionListReceived) {
+  serverAction(action, bypass=false){
+    if (!this.gameState.actionListReceived && !bypass) {
       this.gameState.actionQueue.push(action);
       return;
     }
@@ -145,12 +146,17 @@ class RemoteProxy {
       this.gameState.serverTurn(action);
   }
   serverActionList(actionList) {
-    const shouldPlay = this.shouldPlay;
-    this.shouldPlay = false;
+    const shouldPlay = this.gameState.shouldPlay;
+    this.gameState.shouldPlay = false;
+    // console.log("Reading an action list. Should not play.",{shouldPlay,gameStateShouldPlay:this.gameState.shouldPlay});
     actionList.forEach((action,i)=>{
+      // console.log(`Loading action ${i} of ${actionList.length}).`);
       // reenable actions on last action
-      if (i == actionList.length-1) this.shouldPlay = shouldPlay;
-      this.serverAction(action);
+      if (i == actionList.length-1) {
+        this.gameState.shouldPlay = shouldPlay;
+        // console.log(`Reached end of action list (${i} of ${actionList.length}). Resume playing to prior state.`,{gameStateShouldPlay:this.gameState.shouldPlay});
+      }
+      this.serverAction(action, true);
     });
     this.gameState.actionListReceived = true;
     this.gameState.actionQueue.forEach(action=>this.serverAction(action));

@@ -55,12 +55,15 @@ class CoxAI {
     return weights[0][0];
   }
 
-  knownHandModulo(hand, qty, playable, trash) {
+  knownHandModulo(hand, qty, playable, trash, apply=false) {
     let publicHand = hand.map(c=>c.public);
     let i = CoxAI.handFocusCox(publicHand, playable);
     let trueMask = this.gameState.cardMasks[hand[i].suitIndex][hand[i].rank];
-    let submasks = CoxAI.submasksCox(publicHand, qty, playable, trash);
-    return submasks.indexOf(submasks.find(mask=>mask&trueMask));
+    let submasks = CoxAI.submasksCox(publicHand[i], qty, playable, trash);
+    let moduloIndex = submasks.indexOf(submasks.find(mask=>mask&trueMask));
+    if (apply)
+      hand[i].public &= submasks[moduloIndex];
+    return moduloIndex;
   }
 
   identifyValidHints() {
@@ -100,27 +103,10 @@ class CoxAI {
 
     // Priority 3: Hint
     if (gameState.tokens>=1) {
-      let allowedHints = this.identifyValidHints().flatMap((hs,i)=>hs.map(h=>[i,h]));
-      let qty = allowedHints.length;
-      if (qty >= 4) {
-        // give hatguess hint
-        let modulo = this.gameState.hands.map((h,i)=>i===ourPlayerIndex?0:this.knownHandModulo(h,qty,playable,trash));
-        modulo = modulo.reduce((c,n)=>(c+n)%qty,0);
-        let [target, type] = allowedHints[modulo];
-
-        let targetTrueMasks = gameState.hands[target].map(c=>gameState.cardMasks[c.suitIndex][c.rank]);
-        let allowedClues = gameState.clueMasks[type].map((mask,value)=>[value,mask]).filter(([value,mask])=>targetTrueMasks.find(c=>c&mask)).map(([value,mask])=>value);
-
-        if (type === 0)
-          gameState.clientClueColor({target,type,value:allowedClues[0]});
-        else if (type === 1)
-          gameState.clientClueColor({target,type,value:0});
-        else
-          throw new Error("Not Implemented Yet: cox priority 3");
-
+      if (this.giveHatguessHint())
         return 3;
-      }
-      console.log("Failed to find suitable hatguess hint...");
+      else
+        console.log("Failed to find suitable hatguess hint...");
     }
 
     // Priority 4: Discard trash
@@ -134,20 +120,32 @@ class CoxAI {
     // cant play, cant hint, cant safe discard
     // So make the safest discard we can!
 
-    // **** TESTING START ****
-    let untouched = myHand.filter(card=>!card.touched);
-    if (untouched.length && discardAllowed) {
-      gameState.clientDiscard(untouched[0].order);
-      return 1005
-    }
-    // **** TESTING END ****
+    // // **** TESTING START ****
+    // let untouched = myHand.filter(card=>!card.touched);
+    // if (untouched.length && discardAllowed) {
+    //   gameState.clientDiscard(untouched[0].order);
+    //   return 4.1;
+    // }
+    // // **** TESTING END ****
 
     // Priority 5: Discard Duplicated Card
-    // QUESTION: is this publicly known duplicated? Or is this so long as anyone else has the same card?
+    // let duplicated = myHand.filter(card=> other hands contain exact copy of all possibile things this card could be)
+    const allOtherGroundTruths = gameState.hands.flatMap((hand,i)=>i===ourPlayerIndex?[]:hand.map(card=>gameState.cardMasks[card.suitIndex][card.rank])).reduce((c,n)=>c|n,0n);
+    let duplicated = myHand.filter(card => card.public === (card.public&allOtherGroundTruths));
+    if (duplicated.length && discardAllowed) {
+      gameState.clientDiscard(duplicated[0].order);
+      return 5;
+    }
+    // Improvement can be made to discard furthest from playable known non-critical, or ones where the other copy is fully known.
+    
 
     // Priority 6: Discard Non-Critical
-    // if privatehand.filter(!critical)
-    // discard oldest
+    // Identify the card least likely to be critical
+    let leastCritical = myHand.sort((a,b)=>bits(a.public & gameState.critical)/bits(a.public)-bits(b.public & gameState.critical)/bits(b.public));
+    if (leastCritical.length && discardAllowed) {
+      gameState.clientDiscard(leastCritical[0].order);
+      return 5;
+    }
 
     // Priority 7: Discard Oldest
     // (Why not least critical? why not unclued?)
@@ -158,37 +156,115 @@ class CoxAI {
 
     // Priority infinite: Misplay
     if (true) {
-      gameState.clientPlay(myHand[CoxAI.handFocusCox(myHand.map(c=>c.public),gameState.playable)].order);
-      return 1008;
+      let mostPlayable = myHand.map(card=>[card.order, bits(card.public&gameState.playable)/bits(card.public)]).reduce((c,n)=>n[1]>c[1]?n:c,[myHand[0].order,0]);
+      gameState.clientPlay(mostPlayable[0]);
+      return 7.1;
     }
 
     return -1;
   }
 
-  getHatguessHint() {
-    const {hands,playable,trash,currentPlayerIndex} = this.gameState;
+  getHintCategories(givingPlayerIndex){
+    let {hands, clueColors, clueRanks, clueMasksStr, ourPlayerIndex} = this.gameState;
+    let ret = [];
+    hands.forEach((hand,i)=>{
+      if (i!==givingPlayerIndex) {
+        // no variant (assume every hand can be clued some color and some rank, and that it doesnt matter which is given)
+        ret.push(clueColors.map((c,colorIndex)=>{return {playerIndex:i,clue:c,colorIndex}}));
+        ret.push(clueRanks.map(r=>{return {playerIndex:i,clue:r,rank:Number(r)}}));
+      }
+    });
+    console.log(`hintCategories\n[\n  ${ret.map((a,i)=>`${i}: "${a[0].playerIndex}~${a.map(c=>c.clue).join("")}"`).join(",\n  ")}\n]`);
+    
+    if (givingPlayerIndex === ourPlayerIndex){
+      // Filter impossible categories when it is our turn
+      ret = ret.map(cat=>
+        cat.filter(({playerIndex,clue})=>{
+          let clueMask = clueMasksStr[clue];
+          return hands[playerIndex].find(({suitIndex,rank})=>
+            clueMask & this.gameState.cardMasks[suitIndex][rank]
+          )
+        })
+      );
+      console.log(`hintCategories,filtered\n  [\n    ${ret.map((a,i)=>`${i}: "${a[0].playerIndex}~${a.map(c=>c.clue).join("")}"`).join(",\n    ")}\n  ]`);
+    }
 
-    // Get non-player hands
-    let hInds = hands.map((_,i)=>i);
-    hInds.splice(currentPlayerIndex,1);
-
-    let focuses = hInds.map((hi,_)=>CoxAI.handFocusCox(hands[hi].map(c=>c.public), playable));
-    let submasks = hInds.map((hi,i)=>CoxAI.submasksCox(hands[hi][focuses[i]], (this.gameState.numPlayers-1)*2, playable, trash));
-    let modulos = hInds.map((hi,i)=>submasks[i]);
+    return ret;
   }
+  giveHatguessHint(){
+    const {playable, trash, hands, ourPlayerIndex} = this.gameState;
 
-  playerInterpretClue({clue,target,list}){
-    // let qty = ;
-    // let actualModulo = ;
-    // let visibleModulo = this.gameState.hands.map((h,i)=>
-    //     i===ourPlayerIndex || i===target?
-    //     0:
-    //     this.knownHandModulo(h,qty,this.gameState.playable,this.gameState.trash)
-    //   );
+    const hintCategories = this.getHintCategories(ourPlayerIndex);
+    const qty = hintCategories.length;
+    if (qty >= 4) {
+      let modulo = 0;
+      hands.forEach((hand,i)=>{
+        if (i!==ourPlayerIndex)
+          modulo += this.knownHandModulo(hand,qty,playable,trash, false);
+      });
+      modulo = modulo%qty;
+      console.log("Selected modulo category",modulo);
 
-    // let myHandModulo = (actualModulo-visibleModulo+qty)%qty;
+      const selectedCategory = hintCategories[modulo];
 
-    console.log("Not implemented!");
+      // Subdivide hint here, if applicable.
+      // if (giveableHints of selectedCategory).canConveyAdditionalBits()
+      //   determine subdivisionModulo, apply relevant conveyable bits
+
+      // Maximize information/entropy conveyed with hint
+      let selectedHint =
+          // selectedCategory.findMin(hint => bits(card after hint) / bits(card before hint) )
+          selectedCategory[0];
+
+      this.gameState.clientClue(selectedHint);
+      return true;
+    }
+    return false;
+  }
+  playerInterpretClue({clue,target,list}, givingPlayerIndex){
+    const {playable, trash, hands, ourPlayerIndex} = this.gameState;
+    let myHand = hands[ourPlayerIndex];
+
+    const hintCategories = this.getHintCategories(givingPlayerIndex);
+    const qty = hintCategories.length;
+    if (qty < 4) {
+      console.log("This hint isnt a hatguess, since there are not enough options available to convey useful information.");
+      return;
+    }
+    const matchesClue = (
+      (clue.type===0)
+      ?
+        (({playerIndex,colorIndex}) => target==playerIndex && colorIndex === clue.value)
+      :
+        (({playerIndex,rank}) => target==playerIndex && rank === clue.value)
+    );
+    const matchingCategories = hintCategories.filter(cat=>cat.find(matchesClue));
+    if (matchingCategories.length!=1)
+      throw new Error(`Hint matches ${matchingCategories.length} category(s) for hint modulo! This should only ever be 1!`);
+    const actualModulo = hintCategories.indexOf(matchingCategories[0]);
+
+    let visibleModulo = 0;
+    hands.forEach((hand,i)=>{
+        if (i!==ourPlayerIndex && i!==givingPlayerIndex) {
+          visibleModulo += this.knownHandModulo(hand,qty,playable,trash, true);
+        }
+      });
+    visibleModulo = visibleModulo%qty;
+
+    if (givingPlayerIndex === ourPlayerIndex) {
+      console.log("This hint was sent by us.",{visibleModulo,actualModulo});
+      return;
+    }
+
+    const myHandModulo = (actualModulo-visibleModulo+qty)%qty;
+    const myHandFocus = CoxAI.handFocusCox(myHand.map(c=>c.public), playable);
+    const myHandMasks = CoxAI.submasksCox(myHand[myHandFocus].public, qty, playable, trash);
+    const newMask = myHandMasks[myHandModulo];
+    if (!(newMask > 0n) || myHandModulo<0 || myHandModulo>=qty)
+      throw new Error(`Modulo calculated for me falls outside of expected bounds! ${JSON.stringify({myHandModulo,newMask:String(newMask)})}`)
+
+    console.log(`My hand's focus (${myHandFocus}) possibilities reduced from ${bits(myHand[myHandFocus].public)} to ${bits(newMask&myHand[myHandFocus].public)}=${bits(newMask)}.`);
+    myHand[myHandFocus].public &= newMask;
   }
   playerInterpretDiscard(){}
   playerInterpretStrike(){}
