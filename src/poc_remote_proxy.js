@@ -17,12 +17,17 @@ class RemoteProxy {
     this.commandingUser = null;
     this.gameState = null;
     this.warningsRateLimit = [];
+    this.timer = {};
 
     if (!token) throw new Error("There is no passed token!");
     this.ws = new WebSocket('wss://hanab.live/ws', {headers:{Cookie:token}});
     this.ws.on("open", function open(){console.log("Connected...")});
     this.ws.on("close", function close(code,reason){console.log(`WebSocket connection closed. Code: ${code}, Reason: ${reason}`)});
-    this.ws.on("error", function error(err){console.error(`WebSocket error. Code: ${err.code}, Message: ${err.message}`)});
+    this.ws.on("error", function error(err){
+      if (err.code === 401)
+        throw new Error("Unathenticated error. Probably the token has expired or is invalid.");
+      console.error(`WebSocket error. Code: ${err.code}, Message: ${err.message}`);
+    });
     this.send=(type,json)=>{
       if (this.ws.readyState !== WebSocket.OPEN) console.error("WebSocket is not open. Cannot send message.");
       if (json) type = type+" "+JSON.stringify(json);
@@ -74,7 +79,8 @@ class RemoteProxy {
 
     // Within a game
     if (type === "init")
-      { this.gameState = this.createGameState(data); console.log(`Initializing game with ${data.hasCustomSeed?"custom seed":"seed"} ${JSON.stringify(data.seed)}.`); }
+      { this.gameState = this.createGameState(data); console.log(`Initializing game with ${data.hasCustomSeed?"custom seed":"seed"} ${JSON.stringify(data.seed)}.`); 
+        this.timer = {myTurn:0, thinking:0, gameTime:- +new Date()}; }
     if (type === "gameAction")
       this.serverAction(data.action);
     if (type === "gameActionList")
@@ -95,7 +101,7 @@ class RemoteProxy {
       this.send("tableVoteForTermination",{tableID:this.tableID});
     if (message[0] === "/terminate")
       this.send("tableTerminate",{tableID:this.tableID});
-    if (message[0] === "/rejoin") {
+    if (message[0] === "/rejoin" || message[0] === "/reattend" || message[0] === "/attend") {
       this.send("tableUnattend",{tableID:this.tableID});
       this.send("tableReattend",{tableID:this.tableID});
     }
@@ -103,6 +109,8 @@ class RemoteProxy {
       this.send("tableSpectate",{tableID:this.usersToTables.get(who),shadowingPlayerIndex:Number(message[1]??-1)});
     if (message[0] === "/unattend")
       { this.send("tableUnattend",{tableID:this.tableID}); this.tableID=null; this.gameState=null; }
+    if (message[0] === "/restart")
+      this.send("tableRestart",{tableID:this.tableID,hidePregame:false});
   }
   createGameState(init) {
     const gameState = new GameState(init.options.variantName, init.playerNames, init.ourPlayerIndex);
@@ -126,6 +134,7 @@ class RemoteProxy {
       return;
     }
 
+    this.timer.thinking -= +new Date();
     if (action.type==="draw")
       this.gameState.serverDraw(action);
     if (action.type==="play")
@@ -140,10 +149,14 @@ class RemoteProxy {
     if (action.type==="status")
     //   this.gameState.serverStatus(action);
       console.log(`Current state:`,JSON.stringify({turn:this.gameState.turn, tokens:this.gameState.tokens, strikes:this.gameState.strikes, playable:bits(this.gameState.playable), trash:bits(this.gameState.trash), playPile:this.gameState.playPile.map(a=>a?.length), discardPile:this.gameState.discardPile.length,hands:this.gameState.hands.map(hand=>hand.map(c=>bits(c.public)))}));
-    if (action.type==="gameOver")
+    if (action.type==="gameOver") {
       this.gameState.serverGameOver(action);
+      this.timer.gameTime += +new Date();
+    }
     if (action.type==="turn")
       this.gameState.serverTurn(action);
+
+    this.timer.thinking += +new Date();
   }
   serverActionList(actionList) {
     const shouldPlay = this.gameState.shouldPlay;

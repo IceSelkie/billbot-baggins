@@ -71,7 +71,13 @@ class CoxAI {
   }
 
   playerTurn(){
+    // Give a half second grace for first turn for all clients to synchronize
+    if (+new Date() + proxy.timer.gameTime < 500)
+      return setTimeout(()=>this.playerTurn(), 500 - proxy.timer.gameTime - +new Date());
+
+    proxy.timer.myTurn -= +new Date();
     console.log("Took action with priorty",this.coxAction());
+    proxy.timer.myTurn += +new Date();
   }
   coxAction(){
     const gameState = this.gameState;
@@ -186,7 +192,7 @@ class CoxAI {
           )
         })
       );
-      console.log(`hintCategories,filtered\n  [\n    ${ret.map((a,i)=>`${i}: "${a[0].playerIndex}~${a.map(c=>c.clue).join("")}"`).join(",\n    ")}\n  ]`);
+      console.log(`hintCategories,filtered\n  [\n    ${ret.map((a,i)=>`${i}: "${a[0]?.playerIndex}~${a.map(c=>c.clue).join("")}"`).join(",\n    ")}\n  ]`);
     }
 
     return ret;

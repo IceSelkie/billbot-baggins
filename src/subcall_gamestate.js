@@ -94,15 +94,17 @@ class GameState {
 
     this.turn++;
     this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.numPlayers;
-    console.log("Turn increments to turn", this.turn, 'which is now player', this.currentPlayerIndex, `(${this.playerNames[this.currentPlayerIndex]})'s turn.`);
+    console.log("Turn increments to turn", this.turn, 'which is now player', this.currentPlayerIndex, `(${this.playerNames[this.currentPlayerIndex]})'s turn.`,{shouldPlay:this.shouldPlay});
     if (this.currentPlayerIndex == this.ourPlayerIndex) {
       console.log('It is now our turn...');
       if (!this.shouldPlay)
         console.log("Skipping, since we are in replay/history.");
       else if (!this.ai)
         console.log("I'm missing my brain... I don't know how to play...");
-      else
+      else {
+        console.log("We are up-to-date and it is my turn!");
         this.ai.playerTurn();
+      }
     }
   }
   updatePlayable(card) {
@@ -363,9 +365,9 @@ class GameState {
   // ensure turn counter, strikes, clues, timing, etc. are still up to date
   serverOther() { };
 
-  clientPlay({ order }) { throw new Error('Method "clientPlay" not implemented'); }
-  clientDiscard({ order }) { throw new Error('Method "clientDiscard" not implemented'); }
-  clientClue({ target, clue }) { throw new Error('Method "clientClue" not implemented'); }
+  clientPlay({ order }) { throw new Error('Method "clientPlay" not implemented here. Please extend and implement.'); }
+  clientDiscard({ order }) { throw new Error('Method "clientDiscard" not implemented here. Please extend and implement.'); }
+  clientClue({ target, clue }) { throw new Error('Method "clientClue" not implemented here. Please extend and implement.'); }
 }
 
 
