@@ -1,4 +1,3 @@
-
 emptyArrays = (n) => new Array(n).fill(null).map(_ => []);
 
 // Currently works with:
@@ -290,6 +289,8 @@ class GameState {
   }
 
   displayPublicGrids(when) {
+    if (!global.DEBUG) return;
+
     console.log({publicUnknown:this.publicMultiplicities.flat().reduce((c,n)=>c+n,0),privateUnknown:this.privateMultiplicities.flat().reduce((c,n)=>c+n,0)});
     console.log("Below is [playable, trash, critical, publicMultis, privateUnrevealeds, privateMultis, publicUnknowns]\n"
         + displayRow([this.playable,this.trash,this.critical,multiplicitiesToMaskList(this.publicMultiplicities),0n,multiplicitiesToMaskList(this.privateMultiplicities),this.cardMaskUnknown],this.suits.length,this.ranks.length));

@@ -7,47 +7,102 @@ RemoteProxy = eval("" + fs.readFileSync("poc_remote_proxy.js"));
 CoxAI = eval("" + fs.readFileSync("subcall_hatguess_cox.js"));
 eval("" + fs.readFileSync("hatguess_POC_display.js"));
 multiplicitiesToMaskList = (m) => { m = m[0].map((_, i) => m.map(b => b[i])).flat(); let qtys = new Array(m.reduce((c, n) => Math.max(c, n), 0) + 1).fill(null).map((_, i) => i); return qtys.map(q => m.map(v => v === q).map((v, i) => v ? 1n << BigInt(i) : 0n).reduce((c, n) => c | n, 0n)) }
+DEBUG = false;
 
-playerNames = ["local-2","local-1","local-4","local-3"];
+turnActionComplete = false;
+autoStep = false;
+
+/* ################ GAME SPECIFICS ################ */
 vari = variants.find(a=>a.id === 180);null
 dvari = v.find(a=>a.id === 180);null
+playerNames = ["local-2","local-1","local-4","local-3"];
+handSize = 4;
 server = new GameState(vari, dvari, playerNames, -1); server.isServer = true;
-turnActionComplete = false;
 
-actions = JSON.parse(fs.readFileSync("../../../Downloads/temp.json"));
+// seed 'p4v180s1'
 cards = [{"suitIndex":3,"rank":5},{"suitIndex":0,"rank":3},{"suitIndex":0,"rank":3},{"suitIndex":0,"rank":4},{"suitIndex":2,"rank":1},{"suitIndex":0,"rank":2},{"suitIndex":5,"rank":2},{"suitIndex":2,"rank":3},{"suitIndex":2,"rank":1},{"suitIndex":3,"rank":3},{"suitIndex":3,"rank":4},{"suitIndex":4,"rank":3},{"suitIndex":5,"rank":3},{"suitIndex":2,"rank":4},{"suitIndex":5,"rank":2},{"suitIndex":0,"rank":5},{"suitIndex":2,"rank":5},{"suitIndex":1,"rank":1},{"suitIndex":1,"rank":1},{"suitIndex":4,"rank":3},{"suitIndex":2,"rank":2},{"suitIndex":5,"rank":4},{"suitIndex":1,"rank":3},{"suitIndex":3,"rank":4},{"suitIndex":0,"rank":4},{"suitIndex":3,"rank":3},{"suitIndex":5,"rank":4},{"suitIndex":5,"rank":1},{"suitIndex":1,"rank":1},{"suitIndex":5,"rank":1},{"suitIndex":5,"rank":3},{"suitIndex":0,"rank":2},{"suitIndex":4,"rank":1},{"suitIndex":4,"rank":4},{"suitIndex":2,"rank":3},{"suitIndex":5,"rank":1},{"suitIndex":2,"rank":2},{"suitIndex":4,"rank":2},{"suitIndex":4,"rank":1},{"suitIndex":1,"rank":3},{"suitIndex":4,"rank":2},{"suitIndex":1,"rank":4},{"suitIndex":5,"rank":5},{"suitIndex":4,"rank":1},{"suitIndex":3,"rank":1},{"suitIndex":1,"rank":2},{"suitIndex":1,"rank":2},{"suitIndex":3,"rank":2},{"suitIndex":1,"rank":5},{"suitIndex":4,"rank":4},{"suitIndex":3,"rank":2},{"suitIndex":3,"rank":1},{"suitIndex":1,"rank":4},{"suitIndex":4,"rank":5},{"suitIndex":0,"rank":1},{"suitIndex":2,"rank":1},{"suitIndex":3,"rank":1},{"suitIndex":2,"rank":4},{"suitIndex":0,"rank":1},{"suitIndex":0,"rank":1}];
 order = 0;
+
+/* ################ HELPERS ################ */
 resolveOrder=(o)=>cards[o]?`c${o}=${server.suits[cards[o].suitIndex]}${cards[o].rank}`:`c${o}=UNKNOWN`;
 resolvePlayer=(pi)=>`p${pi}~${playerNames[pi]}`;
 resolveClue=({type,value})=>`${type?"rank":"color"}${value}~${type?String(value):server.clueColors[value]}`;
 
-handSize = 4;
-autoStep = false;
-
+/* ################ SET UP PLAYERS ################ */
 players = playerNames.map((_,pi)=>{
   let gameState = new GameState(vari, dvari, playerNames, pi);
+  // Set AI to hat guessing
   gameState.ai = new CoxAI(gameState);
-
-  // gameState.clientPlay=(order)=>{this.send("action",{tableID:this.tableID,type:0,target:order});}
+  // Add listeners for when the AI takes actions
   gameState.clientPlay=(order)=>{console.log("Play attempted by "+pi,{order}); clientPlay(pi,order)};
-  // gameState.clientDiscard=(order)=>{this.send("action",{tableID:this.tableID,type:1,target:order});}
   gameState.clientDiscard=(order)=>{console.log("Discard attempted by "+pi,{order}); clientDiscard(pi,order)};
   gameState.clientClue=({playerIndex,colorIndex,rank})=>{console.log(`Clue ${rank?"Rank":"Color"} attempted by ${pi} ${JSON.stringify({playerIndex,colorIndex,rank})}`); clientClue(pi,playerIndex,colorIndex,rank)};
-  // gameState.clientClueColor=(playerIndex,color)=>{this.send("action",{tableID:this.tableID,type:2,target:playerIndex,value:Number(color)});}
   gameState.clientClueColor=(playerIndex,colorIndex)=>{console.log("Clue Color attempted by "+pi,{playerIndex,colorIndex}); clientClue(pi,playerIndex,colorIndex,null)};
-  // gameState.clientClueRank=(playerIndex,rank)=>{this.send("action",{tableID:this.tableID,type:3,target:playerIndex,value:Number(rank)});}
   gameState.clientClueRank=(playerIndex,rank)=>{console.log("Clue Rank attempted by "+pi,{playerIndex,rank}); clientClue(pi,playerIndex,null,rank)};
-
-  return gameState
+  return gameState;
 });
+
+
+
+
+
+/* ################ GENERAL TIMING AND ASSURANCE ################ */
+function main() {
+  // Deal starting cards (last card dealt triggers first player to try to play)
+  playerNames.forEach((p,playerIndex)=>{
+    for (let i=0; i<handSize; i++)
+      playerDraw(playerIndex);
+  });
+
+  // Run game to completion
+  while (step()) {};
+
+  // Output Score:
+  console.error("Players scored "+server.playPile.flat().length+"!");
+  // Expect 28 points for this seed and AI.
+}
+
+// Let stepping forward be its own function for easier debugging
+function step() {
+  console.log(`Queueing next step/turn.`);
+  if (server.turnsLeft === 0) {
+    announceAll("serverGameOver",null,{reason:"Ran out of turns"});
+    return false;
+  } else {
+    announceAll("serverTurn",null,{num:server.turn,currentPlayerIndex:(server.currentPlayerIndex+1)%playerNames});
+    // {"type":"turn","num":1,"currentPlayerIndex":1},
+    return true;
+  }
+}
 
 function assert(message, bool, object) {
   if (!bool)
     throw new Error(message+(object?" "+JSON.stringify(object):""));
 }
 
+// Do some simple validation checks on the hands to detect mistakes nearer to when they occur.
+function verifyHandsValid() {
+  const mismatchedIdentities = players.map((player,pi)=>
+    player.hands.map((hand,hi)=>
+      hand.map((card,ci)=>{
+        const serverCard = server.hands[hi][ci];
+        // player's knowledge disagrees with ground truth (or the order of cards in hand has changed)
+        if (!(card.public & serverCard.public) || card.order!==serverCard.order) {
+          return {pi, hi, ci, card, trueCard:resolveOrder(server.hands[hi][ci].order)};
+        }
+      })
+    )
+  ).flat(3).filter(a=>a);
+  if (mismatchedIdentities.length > 0) {
+    console.log(mismatchedIdentities.length, "mismatched identities.");
+    mismatchedIdentities.forEach(o=>console.log(" ",o));
+    throw new Error("Mismatched Identities!")
+  }
+}
 
 
+
+/* ################ DISPATCHER ################ */
 oldConsole = console.log;
 outgoingQueue = [];
 busyAnnoucing = false;
@@ -95,36 +150,9 @@ announceAll=(action, i, payload, payload2)=>{
     announceAll(...outgoingQueue.splice(0,1)[0]);
 }
 
-function step() {
-  console.log(`Queueing next step/turn.`);
-  if (server.turnsLeft === 0) {
-    announceAll("serverGameOver",null,{reason:"Ran out of turns"});
-    return false;
-  } else {
-    announceAll("serverTurn",null,{num:server.turn,currentPlayerIndex:(server.currentPlayerIndex+1)%playerNames});
-    // {"type":"turn","num":1,"currentPlayerIndex":1},
-    return true;
-  }
-}
 
-function verifyHandsValid() {
-  const mismatchedIdentities = players.map((player,pi)=>
-    player.hands.map((hand,hi)=>
-      hand.map((card,ci)=>{
-        const serverCard = server.hands[hi][ci];
-        if (card.order!==serverCard.order || !(card.public & serverCard.public)) {
-          // card says what it truely is isnt the case anymore
-          return {pi, hi, ci, card, trueCard:resolveOrder(server.hands[hi][ci].order)};
-        }
-      })
-    )
-  ).flat(3).filter(a=>a);
-  if (mismatchedIdentities.length > 0) {
-    console.log(mismatchedIdentities.length, "mismatched identities.");
-    mismatchedIdentities.forEach(o=>console.log(" ",o));
-    throw new Error("Mismatched Identities!")
-  }
-}
+
+/* ################ GAME ACTIONS ################ */
 
 function playerDraw(playerIndex) {
   // No cards left; dont draw.
@@ -162,28 +190,6 @@ function clientClue(from,to,colorIndex,rank){
   turnActionComplete = true;
   if (autoStep) step();
 }
-
-// function clientClueRank(from,to,rank){
-//   assert("Must have clues", server.tokens>=1,{tokens:server.tokens});
-//   assert("Clue target player must exist", server.hands[to],{playerCt:playerNames.length,from,to,rank});
-//   const touchedCards = server.hands[to].filter(card => card.public & server.clueMasks[1][rank]).map(a=>a.order);
-//   assert("Clue must touch at least one card!", touchedCards.length>0, {touchedCards});
-//   announceAll("serverClue",null,{clue:{type:1,value:rank},giver:from,target:to,list:touchedCards});
-//   // {"type":"clue","clue":{"type":1,"value":4},"giver":0,"list":[13],"target":3,"turn":0},
-
-//   if (autoStep) step();
-// }
-
-// function clientClueColor(from,to,colorIndex){
-//   assert("Must have clues", server.tokens>=1,{tokens:server.tokens});
-//   assert("Clue target player must exist", server.hands[to],{playerCt:playerNames.length,from,to,colorIndex});
-//   const touchedCards = server.hands[to].filter(card => card.public & server.clueMasks[0][colorIndex]).map(a=>a.order);
-//   assert("Clue must touch at least one card!", touchedCards.length>0, {touchedCards});
-//   announceAll("serverClue",null,{clue:{type:1,value:colorIndex},giver:from,target:to,list:touchedCards});
-//   // {"type":"clue","clue":{"type":1,"value":4},"giver":0,"list":[13],"target":3,"turn":0},
-
-//   if (autoStep) step();
-// }
 
 function clientPlay(playerIndex,order) {
   if (turnActionComplete) throw new Error("Turn is already complete! Move to next turn before trying to play!");
@@ -247,21 +253,7 @@ function clientDiscard(playerIndex,order) {
 
 
 
-// Deal cards (last card dealt triggers first player to try to play)
-playerNames.forEach((p,playerIndex)=>{
-  for (let i=0; i<handSize; i++)
-    playerDraw(playerIndex);
-});
-
-
-
-// Run to completion.
-while (step()) {};
-
-// Score:
-console.log("Players scored "+server.playPile.flat().length+"!");
-
-// Expect 28 points
+main();
 
 
 
