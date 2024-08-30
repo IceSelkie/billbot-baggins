@@ -147,7 +147,7 @@ class CoxAI {
 
     // Priority 6: Discard Non-Critical
     // Identify the card least likely to be critical
-    let leastCritical = myHand.sort((a,b)=>bits(a.public & gameState.critical)/bits(a.public)-bits(b.public & gameState.critical)/bits(b.public));
+    let leastCritical = myHand.map(a=>a).sort((a,b)=>bits(a.public & gameState.critical)/bits(a.public)-bits(b.public & gameState.critical)/bits(b.public));
     if (leastCritical.length && discardAllowed) {
       gameState.clientDiscard(leastCritical[0].order);
       return 5;
