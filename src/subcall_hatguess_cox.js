@@ -72,12 +72,12 @@ class CoxAI {
 
   playerTurn(){
     // Give a half second grace for first turn for all clients to synchronize
-    if (+new Date() + proxy.timer.gameTime < 500)
+    if (global.proxy && +new Date() + proxy.timer.gameTime < 500)
       return setTimeout(()=>this.playerTurn(), 500 - proxy.timer.gameTime - +new Date());
 
-    proxy.timer.myTurn -= +new Date();
+    if (global.proxy) proxy.timer.myTurn -= +new Date();
     console.log("Took action with priorty",this.coxAction());
-    proxy.timer.myTurn += +new Date();
+    if (global.proxy) proxy.timer.myTurn += +new Date();
   }
   coxAction(){
     const gameState = this.gameState;
@@ -180,7 +180,7 @@ class CoxAI {
         ret.push(clueRanks.map(r=>{return {playerIndex:i,clue:r,rank:Number(r)}}));
       }
     });
-    console.log(`hintCategories\n[\n  ${ret.map((a,i)=>`${i}: "${a[0].playerIndex}~${a.map(c=>c.clue).join("")}"`).join(",\n  ")}\n]`);
+    console.log(`hintCategories (ignore p=${givingPlayerIndex})\n[\n  ${ret.map((a,i)=>`${i}: "${a[0].playerIndex}~${a.map(c=>c.clue).join("")}"`).join(",\n  ")}\n]`);
     
     if (givingPlayerIndex === ourPlayerIndex){
       // Filter impossible categories when it is our turn
@@ -249,13 +249,15 @@ class CoxAI {
       throw new Error(`Hint matches ${matchingCategories.length} category(s) for hint modulo! This should only ever be 1!`);
     const actualModulo = hintCategories.indexOf(matchingCategories[0]);
 
-    let visibleModulo = 0;
+    let visibleModulos = [];
     hands.forEach((hand,i)=>{
-        if (i!==ourPlayerIndex && i!==givingPlayerIndex) {
-          visibleModulo += this.knownHandModulo(hand,qty,playable,trash, true);
-        }
+        if (i!==ourPlayerIndex && i!==givingPlayerIndex)
+          visibleModulos.push(this.knownHandModulo(hand,qty,playable,trash, true));
+        else
+          visibleModulos.push(null);
       });
-    visibleModulo = visibleModulo%qty;
+    let visibleModulo = visibleModulos.reduce((c,n)=>c+n,0)%qty;
+    console.log("Understood modulo to be", {actualModulo, visibleModulo, visibleModulos});
 
     if (givingPlayerIndex === ourPlayerIndex) {
       console.log("This hint was sent by us.",{visibleModulo,actualModulo});
@@ -263,6 +265,7 @@ class CoxAI {
     }
 
     const myHandModulo = (actualModulo-visibleModulo+qty)%qty;
+    console.log("Thus my hand's modulo was",myHandModulo);
     const myHandFocus = CoxAI.handFocusCox(myHand.map(c=>c.public), playable);
     const myHandMasks = CoxAI.submasksCox(myHand[myHandFocus].public, qty, playable, trash);
     const newMask = myHandMasks[myHandModulo];
