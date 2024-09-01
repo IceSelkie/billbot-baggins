@@ -80,7 +80,7 @@ class RemoteProxy {
     // Within a game
     if (type === "init")
       { this.gameState = this.createGameState(data); console.log(`Initializing game with ${data.hasCustomSeed?"custom seed":"seed"} ${JSON.stringify(data.seed)}.`); 
-        this.timer = {myTurn:0, thinking:0, gameTime:- +new Date()}; }
+        this.timer = {myTurn:0n, thinking:0n, gameTime:-process.hrtime.bigint()}; }
     if (type === "gameAction")
       this.serverAction(data.action);
     if (type === "gameActionList")
@@ -111,6 +111,9 @@ class RemoteProxy {
       { this.send("tableUnattend",{tableID:this.tableID}); this.tableID=null; this.gameState=null; }
     if (message[0] === "/restart")
       this.send("tableRestart",{tableID:this.tableID,hidePregame:false});
+
+    if (message[0] === "/timer" || message[0] === "/timing")
+      this.send("chat",{msg:`Game Duration: ${Math.round(Number(proxy.timer.gameTime??0n)/1e5)/1e4}s, Decisionmaking on my turn: ${Math.round(Number(proxy.timer.myTurn??0n)/1e4)/1e6}s, Time considering other players' moves: ${Math.round(Number(proxy.timer.thinking??0n)/1e5)/1e4}s, `,room:`table${this.tableID}`});
   }
   createGameState(init) {
     const gameState = new GameState(init.options.variantName, init.playerNames, init.ourPlayerIndex);
@@ -134,7 +137,7 @@ class RemoteProxy {
       return;
     }
 
-    this.timer.thinking -= +new Date();
+    this.timer.thinking -= process.hrtime.bigint();
     if (action.type==="draw")
       this.gameState.serverDraw(action);
     if (action.type==="play")
@@ -151,12 +154,12 @@ class RemoteProxy {
       console.log(`Current state:`,JSON.stringify({turn:this.gameState.turn, tokens:this.gameState.tokens, strikes:this.gameState.strikes, playable:bits(this.gameState.playable), trash:bits(this.gameState.trash), playPile:this.gameState.playPile.map(a=>a?.length), discardPile:this.gameState.discardPile.length,hands:this.gameState.hands.map(hand=>hand.map(c=>bits(c.public)))}));
     if (action.type==="gameOver") {
       this.gameState.serverGameOver(action);
-      this.timer.gameTime += +new Date();
+      this.timer.gameTime += process.hrtime.bigint();
     }
     if (action.type==="turn")
       this.gameState.serverTurn(action);
 
-    this.timer.thinking += +new Date();
+    this.timer.thinking += process.hrtime.bigint();
   }
   serverActionList(actionList) {
     const shouldPlay = this.gameState.shouldPlay;

@@ -72,12 +72,15 @@ class CoxAI {
 
   playerTurn(){
     // Give a half second grace for first turn for all clients to synchronize
-    if (global.proxy && +new Date() + proxy.timer.gameTime < 500)
-      return setTimeout(()=>this.playerTurn(), 500 - proxy.timer.gameTime - +new Date());
+    if (global.proxy) {
+      const gameDur = Number(process.hrtime.bigint() + proxy.timer.gameTime)/1e6;
+      if (gameDur < 500)
+        return setTimeout(()=>this.playerTurn(), 500 - gameDur);
+    }
 
-    if (global.proxy) proxy.timer.myTurn -= +new Date();
+    if (global.proxy) proxy.timer.myTurn -= process.hrtime.bigint();
     console.log("Took action with priorty",this.coxAction());
-    if (global.proxy) proxy.timer.myTurn += +new Date();
+    if (global.proxy) proxy.timer.myTurn += process.hrtime.bigint();
   }
   coxAction(){
     const gameState = this.gameState;
