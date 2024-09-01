@@ -1,3 +1,5 @@
+if (process.argv[2] === undefined)
+  throw new Error("Use argv2 as name of bot to run, eg 'bill-bot2' will start the bot as 'bill-bot2' (assuming the token is in the token file)");
 fs = require("fs");
 // const{createHash}=require("crypto");sha256 = buff => createHash("sha256").update(buff).digest("hex");
 eval("" + fs.readFileSync("variants_POC_generate.js"));
@@ -5,7 +7,7 @@ GameState = eval("" + fs.readFileSync("subcall_gamestate.js"));
 RemoteProxy = eval("" + fs.readFileSync("poc_remote_proxy.js"));
 CoxAI = eval("" + fs.readFileSync("subcall_hatguess_cox.js"));
 eval("" + fs.readFileSync("hatguess_POC_display.js"));
-proxy = new RemoteProxy(JSON.parse(fs.readFileSync("../../bill-bot2/token_v2.json"))?.["bill-bot1"]?.token);
+proxy = new RemoteProxy(JSON.parse(fs.readFileSync("../token_v2.json"))?.[process.argv[2]]?.token);
 
 // console.log(displayRow([proxy.gameState.playable,proxy.gameState.trash])+"\n");console.log(displayRow(proxy.gameState.hands[0].map(a=>a.public)));
 

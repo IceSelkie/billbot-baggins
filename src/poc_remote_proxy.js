@@ -17,6 +17,10 @@ class RemoteProxy {
     this.commandingUser = null;
     this.gameState = null;
     this.warningsRateLimit = [];
+    this.wsSendRateLimitDuration = 3000; // server is 2000
+    this.wsSendRateLimitQuantity =  150; // server is  200
+    this.wsSendRateLimit = new Array(this.wsSendRateLimitQuantity).fill(0);
+    this.wsSendRateLimitIndex = 0;
     this.timer = {};
 
     if (!token) throw new Error("There is no passed token!");
@@ -29,9 +33,18 @@ class RemoteProxy {
       console.error(`WebSocket error. Code: ${err.code}, Message: ${err.message}`);
     });
     this.send=(type,json)=>{
+      const now = +new Date();
       if (this.ws.readyState !== WebSocket.OPEN) console.error("WebSocket is not open. Cannot send message.");
       if (json) type = type+" "+JSON.stringify(json);
       if (DEBUG) console.log(new Date(),"~>",type);
+
+      // spinlock until free...?
+      console.error("It has been",now - this.wsSendRateLimit[this.wsSendRateLimitIndex],"ms since 150 sends ago.");
+      console.error(new Date(),"~>",type);
+      while (now - this.wsSendRateLimit[this.wsSendRateLimitIndex] < this.wsSendRateLimitDuration) {};
+      this.wsSendRateLimit[this.wsSendRateLimitIndex++] = now;
+      this.wsSendRateLimitIndex %= this.wsSendRateLimitQuantity;
+
       this.ws.send(type);
     };
     this.ws.on("message",(data)=>{let ind=data.indexOf(" ");try{this.onDispatch(data.slice(0,ind).toString(),JSON.parse(data.slice(ind)))}catch(e){console.error(e);}});
@@ -91,7 +104,9 @@ class RemoteProxy {
     if (recipient) this.commandingUser = who;
     
     let message = msg.split(" ");
-    if (message[0] === "/join" || message[0] === "/joinall")
+    if (message[0] === "/join")
+      this.send("chatPM",{msg:`Warning: This is tressemeraldtea's hatguessing bot. If you are looking for a will-bot, try the "will-bot"s or "reinodovo"s. ("Bot-Fiora2" is also not a bot.)`,recipient:this.commandingUser});
+    if (message[0] === "/joinh")
       this.send("tableJoin",{tableID:this.usersToTables.get(who),password:message.slice(1).join(" ")});
     if (message[0] === "/leave" || message[0] === "/leaveall")
       this.send("tableLeave",{tableID:this.tableID});
