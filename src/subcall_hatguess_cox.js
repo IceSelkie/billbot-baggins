@@ -174,15 +174,26 @@ class CoxAI {
   }
 
   getHintCategories(givingPlayerIndex){
-    let {hands, clueColors, clueRanks, clueMasksStr, ourPlayerIndex} = this.gameState;
+    let {hands, clueColors, clueRanks, clueMasksStr, ourPlayerIndex, specialMasks} = this.gameState;
     let ret = [];
     hands.forEach((hand,i)=>{
       if (i!==givingPlayerIndex) {
         // no variant (assume every hand can be clued some color and some rank, and that it doesnt matter which is given)
-        ret.push(clueColors.map((c,colorIndex)=>{return {playerIndex:i,clue:c,colorIndex}}));
-        ret.push(clueRanks.map(r=>{return {playerIndex:i,clue:r,rank:Number(r)}}));
+
+        // if hand contains publicly known rainbow/pink/omni/empty, add each value as a different hatguess class
+        if (specialMasks.rainbow>0n && hand.find(c=>(c.public&specialMasks.rainbow) === c.public))
+          clueColors.forEach((c,colorIndex)=>ret.push([{playerIndex:i,clue:c,colorIndex}]));
+        else
+          ret.push(clueColors.map((c,colorIndex)=>{return {playerIndex:i,clue:c,colorIndex}}));
+
+        if (specialMasks.pinkish>0n && hand.find(c=>(c.public&specialMasks.pinkish) === c.public))
+          clueRanks.forEach(r=>ret.push([{playerIndex:i,clue:r,rank:Number(r)}]));
+        else
+          ret.push(clueRanks.map(r=>{return {playerIndex:i,clue:r,rank:Number(r)}}));
+
       }
     });
+    ret = ret.filter(a=>a.length);
     console.log(`hintCategories (ignore p=${givingPlayerIndex})\n[\n  ${ret.map((a,i)=>`${i}: "${a[0].playerIndex}~${a.map(c=>c.clue).join("")}"`).join(",\n  ")}\n]`);
     
     if (givingPlayerIndex === ourPlayerIndex){

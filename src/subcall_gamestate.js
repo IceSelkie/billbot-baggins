@@ -36,6 +36,7 @@ class GameState {
     this.clueMasks = [[], []];
     this.clueMasksStr = {};
     this.cardMaskUnknown = BigInt(dvari.cardMaskUnknown);
+    this.specialMasks = {};
 
     this.turn = 0;
     this.tokens = 8;
@@ -62,6 +63,8 @@ class GameState {
       else
         this.clueMasks[1][c] = BigInt(mask);
     });
+    this.specialMasks.rainbow = this.clueMasks[0].length<2?0n:this.clueMasks[0].reduce((c,n)=>c&n);
+    this.specialMasks.pinkish = this.clueMasks[1].length<2?0n:this.clueMasks[1].reduce((c,n)=>c&n);
     dvari.cards.split(",").map(([s, r]) => {
       let suitIndex = this.suits.indexOf(s);
       this.publicMultiplicities[suitIndex][r] = (this.publicMultiplicities[suitIndex][r] ?? 0) + 1;
