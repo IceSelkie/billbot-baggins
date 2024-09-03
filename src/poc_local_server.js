@@ -1,5 +1,4 @@
-// crypto = require("crypto");
-// sha256 = buff => crypto.createHash("sha256").update(buff).digest("hex");
+sha256 = buff => require("crypto").createHash("sha256").update(buff).digest("hex");
 fs = require("fs");null
 eval("" + fs.readFileSync("variants_POC_generate.js"));
 GameState = eval("" + fs.readFileSync("subcall_gamestate.js"));
@@ -60,6 +59,16 @@ function main() {
   // Output Score:
   console.error("Players scored "+server.playPile.flat().length+"!");
   // Expect 28 points for this seed and AI.
+
+  gameHash=(server,doHash=true)=>(doHash?sha256:a=>a)([
+      JSON.stringify({turn:server.turn,tokens:server.tokens,strikes:server.strikes,gameOver:server.gameOver}),
+      server.hands.map(a=>a.map(c=>c.order)).join("|"),
+      server.playPile.map(a=>a.map(c=>c.order+"."+c.suitIndex+c.rank)).join(),
+      server.discardPile.map(c=>c.order+"."+c.suitIndex+c.rank).join()
+    ].join("\n"));
+
+  console.log(gameHash(server).slice(0,6));
+  players.forEach(p=>console.log(gameHash(p).slice(0,6)));
 }
 
 // Let stepping forward be its own function for easier debugging
