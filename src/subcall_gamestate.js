@@ -41,6 +41,7 @@ class GameState {
     this.turn = 0;
     this.tokens = 8;
     this.strikes = 0;
+    this.score = 0;
     this.turnsLeft = null;
     this.gameOver = null;
 
@@ -311,6 +312,7 @@ class GameState {
     let cardIndex = hand.indexOf(card);
     hand.splice(cardIndex, 1);
     this.playPile[suitIndex].push(card);
+    this.score++;
 
     // If card identity is now known, update things:
     if (suitIndex !== -1) {

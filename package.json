@@ -5,6 +5,7 @@
   "main": "0_start_bot.ts",
   "author": "IceSelkie",
   "dependencies": {
+    "crc64-ecma": "^1.0.0",
     "ws": "^8.18.0"
   }
 }

@@ -6,48 +6,49 @@ RemoteProxy = eval("" + fs.readFileSync("poc_remote_proxy.js"));
 CoxAI = eval("" + fs.readFileSync("subcall_hatguess_cox.js"));
 eval("" + fs.readFileSync("hatguess_POC_display.js"));
 multiplicitiesToMaskList = (m) => { m = m[0].map((_, i) => m.map(b => b[i])).flat(); let qtys = new Array(m.reduce((c, n) => Math.max(c, n), 0) + 1).fill(null).map((_, i) => i); return qtys.map(q => m.map(v => v === q).map((v, i) => v ? 1n << BigInt(i) : 0n).reduce((c, n) => c | n, 0n)) }
+crc64 = require("crc64-ecma").crc64;
+GoLangPRNG = require("./golang/rand.js");
 DEBUG = false;
-oldConsole = console.log;
 
 function assert(message, bool, object) {
   if (!bool)
     throw new Error(message+(object?" "+JSON.stringify(object):""));
 }
 
+oldConsole = console.log;
 
-// Expect 8189e7
 class LocalServer {
-  constructor() {
-  this.turnActionComplete = false;
-  this.autoStep = false;
+  constructor(vari, dvari, seed = '1', playerNames = ["local-2","local-1","local-4","local-3"]) {
+    this.vari = vari;
+    this.dvari = dvari;
 
-  /* ################ GAME SPECIFICS ################ */
-  this.vari = variants.find(a=>a.id === 180);null
-  this.dvari = v.find(a=>a.id === 180);null
-  this.playerNames = ["local-2","local-1","local-4","local-3"];
-  this.handSize = 4;
-  this.server = new GameState(this.vari, this.dvari, this.playerNames, -1); this.server.isServer = true;
+    this.playerNames = playerNames;
+    let numP = playerNames.length;
+    this.handSize = [null,null,5,5,4,4,3][numP];
+    this.seed = `p${playerNames.length}v${this.vari.id}s${seed}`;
+    this.cards = LocalServer.shuffleDeckFromSeed(this.dvari, this.seed);
 
-  // seed 'p4v180s1'
-  this.cards = [{"suitIndex":3,"rank":5},{"suitIndex":0,"rank":3},{"suitIndex":0,"rank":3},{"suitIndex":0,"rank":4},{"suitIndex":2,"rank":1},{"suitIndex":0,"rank":2},{"suitIndex":5,"rank":2},{"suitIndex":2,"rank":3},{"suitIndex":2,"rank":1},{"suitIndex":3,"rank":3},{"suitIndex":3,"rank":4},{"suitIndex":4,"rank":3},{"suitIndex":5,"rank":3},{"suitIndex":2,"rank":4},{"suitIndex":5,"rank":2},{"suitIndex":0,"rank":5},{"suitIndex":2,"rank":5},{"suitIndex":1,"rank":1},{"suitIndex":1,"rank":1},{"suitIndex":4,"rank":3},{"suitIndex":2,"rank":2},{"suitIndex":5,"rank":4},{"suitIndex":1,"rank":3},{"suitIndex":3,"rank":4},{"suitIndex":0,"rank":4},{"suitIndex":3,"rank":3},{"suitIndex":5,"rank":4},{"suitIndex":5,"rank":1},{"suitIndex":1,"rank":1},{"suitIndex":5,"rank":1},{"suitIndex":5,"rank":3},{"suitIndex":0,"rank":2},{"suitIndex":4,"rank":1},{"suitIndex":4,"rank":4},{"suitIndex":2,"rank":3},{"suitIndex":5,"rank":1},{"suitIndex":2,"rank":2},{"suitIndex":4,"rank":2},{"suitIndex":4,"rank":1},{"suitIndex":1,"rank":3},{"suitIndex":4,"rank":2},{"suitIndex":1,"rank":4},{"suitIndex":5,"rank":5},{"suitIndex":4,"rank":1},{"suitIndex":3,"rank":1},{"suitIndex":1,"rank":2},{"suitIndex":1,"rank":2},{"suitIndex":3,"rank":2},{"suitIndex":1,"rank":5},{"suitIndex":4,"rank":4},{"suitIndex":3,"rank":2},{"suitIndex":3,"rank":1},{"suitIndex":1,"rank":4},{"suitIndex":4,"rank":5},{"suitIndex":0,"rank":1},{"suitIndex":2,"rank":1},{"suitIndex":3,"rank":1},{"suitIndex":2,"rank":4},{"suitIndex":0,"rank":1},{"suitIndex":0,"rank":1}];
-  this.order = 0;
+    this.server = new GameState(this.vari, this.dvari, this.playerNames, -1); this.server.isServer = true;
 
-  /* ################ SET UP PLAYERS ################ */
-  this.players = this.playerNames.map((_,pi)=>{
-    let gameState = new GameState(this.vari, this.dvari, this.playerNames, pi);
-    // Set AI to hat guessing
-    gameState.ai = new CoxAI(gameState);
-    // Add listeners for when the AI takes actions
-    gameState.clientPlay=(order)=>{console.log("Play attempted by "+pi,{order}); this.clientPlay(pi,order)};
-    gameState.clientDiscard=(order)=>{console.log("Discard attempted by "+pi,{order}); this.clientDiscard(pi,order)};
-    gameState.clientClue=({playerIndex,colorIndex,rank})=>{console.log(`Clue ${rank?"Rank":"Color"} attempted by ${pi} ${JSON.stringify({playerIndex,colorIndex,rank})}`); this.clientClue(pi,playerIndex,colorIndex,rank)};
-    gameState.clientClueColor=(playerIndex,colorIndex)=>{console.log("Clue Color attempted by "+pi,{playerIndex,colorIndex}); this.clientClue(pi,playerIndex,colorIndex,null)};
-    gameState.clientClueRank=(playerIndex,rank)=>{console.log("Clue Rank attempted by "+pi,{playerIndex,rank}); this.clientClue(pi,playerIndex,null,rank)};
-    return gameState;
-  });
+    this.order = 0;
+    this.turnActionComplete = false;
 
-  this.outgoingQueue = [];
-  this.busyAnnoucing = false;
+    /* ################ SET UP PLAYERS ################ */
+    this.players = this.playerNames.map((_,pi)=>{
+      let gameState = new GameState(this.vari, this.dvari, this.playerNames, pi);
+      // Set AI to hat guessing
+      gameState.ai = new CoxAI(gameState);
+      // Add listeners for when the AI takes actions
+      gameState.clientPlay=(order)=>{console.log("Play attempted by "+pi,{order}); this.clientPlay(pi,order)};
+      gameState.clientDiscard=(order)=>{console.log("Discard attempted by "+pi,{order}); this.clientDiscard(pi,order)};
+      gameState.clientClue=({playerIndex,colorIndex,rank})=>{console.log(`Clue ${rank?"Rank":"Color"} attempted by ${pi} ${JSON.stringify({playerIndex,colorIndex,rank})}`); this.clientClue(pi,playerIndex,colorIndex,rank)};
+      gameState.clientClueColor=(playerIndex,colorIndex)=>{console.log("Clue Color attempted by "+pi,{playerIndex,colorIndex}); this.clientClue(pi,playerIndex,colorIndex,null)};
+      gameState.clientClueRank=(playerIndex,rank)=>{console.log("Clue Rank attempted by "+pi,{playerIndex,rank}); this.clientClue(pi,playerIndex,null,rank)};
+      return gameState;
+    });
+
+    this.outgoingQueue = [];
+    this.busyAnnoucing = false;
   }
 
   /* ################ HELPERS ################ */
@@ -55,6 +56,18 @@ class LocalServer {
   resolvePlayer(pi) { return `p${pi}~${this.playerNames[pi]}` }
   resolveClue({type,value}) { return `${type?"rank":"color"}${value}~${type?String(value):this.server.clueColors[value]}` }
 
+  static shuffleDeckFromSeed(dvari, seed) {
+    const cards = dvari.cards.split(",");
+    const rand = new GoLangPRNG();
+    rand.Seed(crc64(seed));
+
+    for (let i=0; i<cards.length; i++) {
+      let j = rand.Intn(i+1);
+      [cards[i],cards[j]] = [cards[j],cards[i]];
+    }
+
+    return cards.map(([s,r])=>{return {suitIndex:dvari.suits.indexOf(s), rank:Number(r)}});
+  }
 
 
 
@@ -70,8 +83,9 @@ class LocalServer {
     while (this.step()) {};
 
     // Output Score:
-    console.error("Players scored "+this.server.playPile.flat().length+"!");
-    // Expect 28 points for this seed and AI.
+    this.strikes = this.server.strikes;
+    this.score = this.strikes===3?0:this.server.playPile.flat().length;
+    // console.error("Players scored "+this.score+"!");
 
     let gameHash=(server,doHash=true)=>(doHash?sha256:a=>a)([
         JSON.stringify({turn:server.turn,tokens:server.tokens,strikes:server.strikes,gameOver:server.gameOver}),
@@ -89,6 +103,12 @@ class LocalServer {
     console.log(`Queueing next step/turn.`);
     if (this.server.turnsLeft === 0) {
       this.announceAll("serverGameOver",null,{reason:"Ran out of turns"});
+      return false;
+    } else if (this.server.strikes === 3) {
+      this.announceAll("serverGameOver",null,{reason:"Bombed"});
+      return false;
+    } else if (this.server.playable === 0n) {
+      this.announceAll("serverGameOver",null,{reason:"No more cards are playable"});
       return false;
     } else {
       this.announceAll("serverTurn",null,{num:this.server.turn,currentPlayerIndex:(this.server.currentPlayerIndex+1)%this.playerNames.length});
@@ -261,18 +281,54 @@ class LocalServer {
 
 
 
+function testGame(vid=0, playerCt=4, seed=1) {
+  let vari = variants.find(a=>a.id==vid);
+  let dvari = v.find(a=>a.id==vid);
+  let playerNames = [..."ABCDEF".slice(0,playerCt)];
+  let game = new LocalServer(vari, dvari, seed, playerNames);
+  game.main();
+  return game;
+}
+
+function testThousand(vid = 180, playerCt=4, qty=1000, offset=0) {
+  let playerNames = [..."ABCDEF".slice(0,playerCt)];
+  let vari = variants.find(a=>a.id==vid);
+  let dvari = v.find(a=>a.id==vid);
+  let ret = {variant:vari.name,averageScore:null, scores:[], crashed:[], zero:[], lowestScore:1e6, lowest:[], highestScore:-1, highest:[]};
+  let nextAnnounce = +new Date()+1000;
+
+  for (let i=0; i<qty; i++) {
+    let game = new LocalServer(vari, dvari, i+offset, playerNames);
+    try {
+      game.main();
+      ret.scores[game.score] = (ret.scores[game.score]??0) + 1;
+
+      let earliestWinOrdering = (game.score*1000 + (game.cards.length-game.order))*1000 + (game.server.turnsLeft+1)
+      console.error({score:game.score, cardsUndealt:game.cards.length-game.order, turnsLeft:game.server.turnsLeft});
+      // console.error(earliestWinOrdering);
+      if (game.score < ret.lowestScore) { ret.lowestScore = game.score; ret.lowest = []; }
+      if (game.score == ret.lowestScore) ret.lowest.push(game.seed);
+      if (earliestWinOrdering > ret.highestScore) { ret.highestScore = earliestWinOrdering; ret.highest = game.seed; }
+    } catch (e) {
+      if (ret.crashed!==undefined) ret.crashed = [];
+      ret.crashed.push(game.seed);
+    }
+    if (nextAnnounce < +new Date()) {
+      nextAnnounce = +new Date() + 1000;
+      console.error(`Just finished game ${i+1} of ${qty} (${game.seed})`);
+    }
+  }
+  ret.scores = Object.entries(ret.scores);
+  console.error(ret.scores); // [ ["0", 1], ["25", 3] ]
+  ret.averageScore = ret.scores.reduce((c,[k,v])=>c+(Number(k)*v),0) / qty;
+  ret.scores = Object.fromEntries(ret.scores);
+  ret.highestScore = {score:Math.round(ret.highestScore/1e6), cardsLeft:-Math.round(ret.highestScore/1e3)%1000, endGameTurnsLeft:ret.highestScore%1000};
+  return ret;
+}
 
 
 
-
-
-
-
-new LocalServer().main();
-
-
-
-
+console.error(JSON.stringify(testThousand(0, 4, 1000),null,2));
 
 
 
