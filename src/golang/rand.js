@@ -49,6 +49,8 @@ class GoLangPRNG {
   Seed(seed) {
     const rng = this;
     seed = BigInt(seed);
+    if (seed >= GoLangPRNG.rngMax) // passed int was unsigned int rather than signed int
+      seed -= 1n<<64n;
     rng.tap = 0;
     rng.feed = GoLangPRNG.rngLen - GoLangPRNG.rngTap;
 

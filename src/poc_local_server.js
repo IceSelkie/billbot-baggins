@@ -26,7 +26,7 @@ class LocalServer {
     let numP = playerNames.length;
     this.handSize = [null,null,5,5,4,4,3][numP];
     this.seed = `p${playerNames.length}v${this.vari.id}s${seed}`;
-    this.cards = LocalServer.shuffleDeckFromSeed(this.dvari, this.seed);
+    this.cards = LocalServer.shuffleDeckFromSeed(this.dvari, this.seed).map(([s,r])=>{return {suitIndex:dvari.suits.indexOf(s), rank:Number(r)}});
 
     this.server = new GameState(this.vari, this.dvari, this.playerNames, -1); this.server.isServer = true;
 
@@ -66,7 +66,7 @@ class LocalServer {
       [cards[i],cards[j]] = [cards[j],cards[i]];
     }
 
-    return cards.map(([s,r])=>{return {suitIndex:dvari.suits.indexOf(s), rank:Number(r)}});
+    return cards;
   }
 
 
@@ -262,6 +262,7 @@ class LocalServer {
 
 }
 
+module.exports = LocalServer;
 
 
 
