@@ -1,5 +1,5 @@
 fs=require("fs");
-LocalServer = eval("" + fs.readFileSync("poc_local_server.js"));
+LocalServer = require("./poc_local_server.js");
 
 // Load data from wshistory/c*.json
 data = [...new Set(

@@ -308,6 +308,9 @@ bits=(int)=>{
   }
   return Number(ret);
 }
+isPowerOfTwo=(int)=>{
+  return 0n === (int & (int-1n));
+}
 onehots=(int)=>{
   let ret = [];
   while (int) {

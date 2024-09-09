@@ -94,8 +94,9 @@ class LocalServer {
         server.discardPile.map(c=>c.order+"."+c.suitIndex+c.rank).join()
       ].join("\n"));
 
-    console.log(gameHash(this.server).slice(0,6));
-    this.players.forEach(p=>console.log(gameHash(p).slice(0,6)));
+    console.log = oldConsole;
+    console.log("S",gameHash(this.server).slice(0,6));
+    this.players.forEach((p,pi)=>console.log(pi,gameHash(p).slice(0,6)));
   }
 
   // Let stepping forward be its own function for easier debugging
@@ -148,14 +149,14 @@ class LocalServer {
     }
     this.busyAnnoucing = true;
 
-    let debugString = JSON.parse(JSON.stringify({action,payload}));
-    if (debugString.payload.order!==undefined) debugString.payload.order = this.resolveOrder(debugString.payload.order);
-    if (debugString.payload.list) debugString.payload.list = debugString.payload.list.map(c=>this.resolveOrder(c));
-    ["playerIndex","giver","target"].forEach(k=>{if(debugString.payload[k]!==undefined)debugString.payload[k]=this.resolvePlayer(debugString.payload[k])});
-    if (debugString.payload.clue) debugString.payload.clue = this.resolveClue(debugString.payload.clue);
-    debugString = JSON.stringify(debugString);
-    console.error(debugString);
-    oldConsole("#~#~#",debugString);
+    // let debugString = JSON.parse(JSON.stringify({action,payload}));
+    // if (debugString.payload.order!==undefined) debugString.payload.order = this.resolveOrder(debugString.payload.order);
+    // if (debugString.payload.list) debugString.payload.list = debugString.payload.list.map(c=>this.resolveOrder(c));
+    // ["playerIndex","giver","target"].forEach(k=>{if(debugString.payload[k]!==undefined)debugString.payload[k]=this.resolvePlayer(debugString.payload[k])});
+    // if (debugString.payload.clue) debugString.payload.clue = this.resolveClue(debugString.payload.clue);
+    // debugString = JSON.stringify(debugString);
+    // console.error(debugString);
+    // oldConsole("#~#~#",debugString);
 
     if (action === "serverTurn") {
       if (!this.turnActionComplete)
@@ -164,12 +165,12 @@ class LocalServer {
     }
 
     // Server tracking
-    console.log=(...dat)=>oldConsole("[SERVER]",...dat);
+    console.log=(...dat)=>!DEBUG?()=>null:oldConsole("[SERVER]",...dat);
     this.server[action](payload);
 
     // Clients
     this.players.forEach((player,pi)=>{
-      console.log=(...dat)=>oldConsole(`[P${pi}]`,...dat);
+      console.log=(...dat)=>!DEBUG?()=>null:oldConsole(`[P${pi}]`,...dat);
       if (pi!==i)
         player[action](payload);
       else
@@ -177,7 +178,7 @@ class LocalServer {
     })
 
     // Reset
-    console.log=(...dat)=>oldConsole(`[NONE]`,...dat);
+    console.log=(...dat)=>!DEBUG?()=>null:oldConsole(`[NONE]`,...dat);
     this.verifyHandsValid();
     this.busyAnnoucing = false;
     if (this.outgoingQueue.length>0)
@@ -282,15 +283,6 @@ module.exports = LocalServer;
 
 
 
-function testGame(vid=0, playerCt=4, seed=1) {
-  let vari = variants.find(a=>a.id==vid);
-  let dvari = v.find(a=>a.id==vid);
-  let playerNames = [..."ABCDEF".slice(0,playerCt)];
-  let game = new LocalServer(vari, dvari, seed, playerNames);
-  game.main();
-  return game;
-}
-
 function testThousand(vid = 180, playerCt=4, qty=1000, offset=0) {
   let playerNames = [..."ABCDEF".slice(0,playerCt)];
   let vari = variants.find(a=>a.id==vid);
@@ -329,7 +321,8 @@ function testThousand(vid = 180, playerCt=4, qty=1000, offset=0) {
 
 
 
-console.error(JSON.stringify(testThousand(0, 4, 1000),null,2));
+
+// console.error(JSON.stringify(testThousand(0, 4, 1000),null,2));
 
 
 

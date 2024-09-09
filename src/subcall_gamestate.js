@@ -1,4 +1,5 @@
 emptyArrays = (n) => new Array(n).fill(null).map(_ => []);
+DEBUG = false;
 
 // Currently works with:
 //  - WS Games as history
